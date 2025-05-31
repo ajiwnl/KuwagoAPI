@@ -65,6 +65,18 @@ namespace KuwagoAPI.Controllers.Credentials
             return BadRequest("No active session found.");
         }
 
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPassRequest request)
+        {
+            var result = await _authService.ForgotPasswordAsync(request.Email);
+
+            if (!result.Success)
+                return StatusCode(result.StatusCode, result.Message);
+
+            return Ok(result.Message);
+        }
+
+
 
 
     }
