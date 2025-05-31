@@ -166,5 +166,43 @@ namespace KuwagoAPI.Services
                 };
             }
         }
+
+        public async Task<StatusResponse> ForgotPasswordAsync(string email)
+        {
+            if (string.IsNullOrWhiteSpace(email) || !new EmailAddressAttribute().IsValid(email))
+            {
+                return new StatusResponse
+                {
+                    Success = false,
+                    Message = "Invalid email address.",
+                    StatusCode = 400
+                };
+            }
+
+            try
+            {
+                await _firebaseAuth.SendPasswordResetEmailAsync(email);
+                return new StatusResponse
+                {
+                    Success = true,
+                    Message = "Password reset email sent. Please check your inbox.",
+                    StatusCode = 200
+                };
+            }
+            catch (Firebase.Auth.FirebaseAuthException ex)
+            {
+                string msg = ex.Message.Contains("EMAIL_NOT_FOUND")
+                    ? "No account found with that email."
+                    : ex.Message;
+
+                return new StatusResponse
+                {
+                    Success = false,
+                    Message = msg,
+                    StatusCode = 404
+                };
+            }
+        }
+
     }
 }
