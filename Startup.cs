@@ -2,6 +2,7 @@
 using Google.Apis.Auth.OAuth2;
 using Google.Cloud.Firestore;
 using KuwagoAPI.Services;
+using Firebase.Auth;
 
 namespace KuwagoAPI
 {
@@ -29,13 +30,15 @@ namespace KuwagoAPI
                 });
             }
 
-            // Register FirestoreDb instance
+            // Register FirestoreDb and Auth instance
+            services.AddSingleton(new FirebaseAuthProvider(new FirebaseConfig("AIzaSyDk9o89s1prZ4aQd1dzB0XiUQWCUGDD7n8")));
             services.AddSingleton(provider =>
             {
                 return FirestoreDb.Create("kuwagodb");
             });
 
             services.AddScoped<FirestoreService>();
+            services.AddScoped<AuthService>();
             services.AddDistributedMemoryCache();
             services.AddSession(options =>
             {
