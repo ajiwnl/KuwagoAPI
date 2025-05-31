@@ -39,8 +39,33 @@ namespace KuwagoAPI.Controllers.Credentials
             if (!result.Success)
                 return StatusCode(result.StatusCode, result.Message);
 
-            HttpContext.Session.SetString("FirebaseUserId", result.Message);
+            // Set a cookie with 10-minute expiration
+            var cookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                Expires = DateTime.UtcNow.AddMinutes(10),
+                SameSite = SameSiteMode.Strict
+            };
+
+            Response.Cookies.Append("session_token", result.Message, cookieOptions);
+
             return Ok("Login successful!");
         }
+
+        [HttpPost("logout")]
+        public IActionResult Logout()
+        {
+            if (Request.Cookies["session_token"] != null)
+            {
+                Response.Cookies.Delete("session_token");
+                return Ok("Logged out successfully.");
+            }
+
+            return BadRequest("No active session found.");
+        }
+
+
+
     }
 }
