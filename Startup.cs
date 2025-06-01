@@ -87,7 +87,7 @@ namespace KuwagoAPI
             _cloudinary = new Cloudinary(account);
         }
 
-        public async Task<string> UploadIDPhotoAsync(IFormFile file)
+        public async Task<string> UploadIDAndSelfieAsync(IFormFile file)
         {
             var transformation = new Transformation()
                 .Width(500)    // Set the width to 500px

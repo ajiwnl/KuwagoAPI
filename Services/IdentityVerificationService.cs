@@ -18,17 +18,19 @@ namespace KuwagoAPI.Services
             return snapshot.Exists;
         }
 
-        public async Task UploadIDAsync(string uid, string imageUrl)
-        {
-            var docRef = _firestoreDb.Collection("ID Photos").Document(uid);
-            var data = new mIdentityVerification
-            {
-                UID = uid,
-                IDUrl = imageUrl,
-                UploadedAt = Timestamp.FromDateTime(DateTime.UtcNow)
-            };
+      public async Task UploadIDPhotoAsync(string uid, string idUrl, string selfieUrl)
+{
+    var docRef = _firestoreDb.Collection("ID Photos").Document(uid);
+    var data = new mIdentityVerification
+    {
+        UID = uid,
+        IDUrl = idUrl,
+        SelfieUrl = selfieUrl,
+        UploadedAt = Timestamp.FromDateTime(DateTime.UtcNow)
+    };
 
-            await docRef.SetAsync(data);
-        }
+    await docRef.SetAsync(data);
+}
+
     }
 }
