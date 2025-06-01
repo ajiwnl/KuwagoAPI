@@ -39,7 +39,12 @@ namespace KuwagoAPI.Controllers.Credentials
             var result = await _authService.LoginUserAsync(request.Email, request.Password);
 
             if (!result.Success)
-                return StatusCode(result.StatusCode, result.Message);
+                return StatusCode(result.StatusCode, new StatusResponse
+                {
+                    Success = false,
+                    Message = result.Message,
+                    StatusCode = result.StatusCode
+                });
 
             // Set a cookie with 10-minute expiration
             var cookieOptions = new CookieOptions
@@ -52,7 +57,12 @@ namespace KuwagoAPI.Controllers.Credentials
 
             Response.Cookies.Append("session_token", result.Message, cookieOptions);
 
-            return Ok("Login successful!");
+            return Ok(new StatusResponse
+            {
+                Success = true,
+                Message = "Login successful!",
+                StatusCode = 200
+            });
         }
 
         [HttpPost("logout")]
@@ -61,10 +71,21 @@ namespace KuwagoAPI.Controllers.Credentials
             if (Request.Cookies["session_token"] != null)
             {
                 Response.Cookies.Delete("session_token");
-                return Ok("Logged out successfully.");
+                return Ok(new StatusResponse
+                {
+                    Success = true,
+                    Message = "User logged out successfully.",
+                    StatusCode = 200
+                });
             }
 
-            return BadRequest("No active session found.");
+            return Ok(new StatusResponse
+            {
+                Success = false,
+                Message = "No active session found.",
+                StatusCode = 400
+            });
+
         }
 
         [HttpPost("ForgotPassword")]
@@ -73,22 +94,45 @@ namespace KuwagoAPI.Controllers.Credentials
             var result = await _authService.ForgotPasswordAsync(request.Email);
 
             if (!result.Success)
-                return StatusCode(result.StatusCode, result.Message);
+            {
+                return StatusCode(result.StatusCode, new StatusResponse
+                {
+                    Success = false,
+                    Message = result.Message,
+                    StatusCode = result.StatusCode
+                });
+            }
 
-            return Ok(result.Message);
+            return Ok(new StatusResponse
+            {
+                Success = true,
+                Message = result.Message,
+                StatusCode = 200
+            });
         }
+
         [HttpGet("GetUser")]
         public async Task<IActionResult> GetUserFromCookie()
         {
             if (!Request.Cookies.TryGetValue("session_token", out var sessionToken) || string.IsNullOrEmpty(sessionToken))
             {
-                return Unauthorized("Session token missing or expired.");
+                return Unauthorized(new StatusResponse
+                {
+                    Success = false,
+                    Message = "Session token missing or expired.",
+                    StatusCode = 401
+                });
             }
 
             var user = await _authService.GetUserByUIDAsync(sessionToken);
 
             if (user == null)
-                return NotFound("User not found.");
+                return Unauthorized(new StatusResponse
+                {
+                    Success = false,
+                    Message = "User not found.",
+                    StatusCode = 400
+                });
 
             var userDto = new UserDto
             {
@@ -102,7 +146,14 @@ namespace KuwagoAPI.Controllers.Credentials
                 CreatedAt = user.createdAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
             };
 
-            return Ok(userDto);
+            return Ok(new StatusResponse
+            {
+                Success = true,
+                Message = "User Data fetched successfully.",
+                StatusCode = 201,
+                Data = userDto
+
+            });
         }
 
 
