@@ -33,6 +33,7 @@ namespace KuwagoAPI.Models
         public Timestamp createdAt { get; set; }
 
         [FirestoreProperty]
-        public string Role { get; set; }
+        public int Role { get; set; }
+
     }
 }

@@ -1,4 +1,6 @@
-﻿using KuwagoAPI.Models;
+﻿using KuwagoAPI.DTO;
+using KuwagoAPI.Helper;
+using KuwagoAPI.Models;
 using KuwagoAPI.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -75,7 +77,6 @@ namespace KuwagoAPI.Controllers.Credentials
 
             return Ok(result.Message);
         }
-
         [HttpGet("GetUser")]
         public async Task<IActionResult> GetUserFromCookie()
         {
@@ -89,12 +90,20 @@ namespace KuwagoAPI.Controllers.Credentials
             if (user == null)
                 return NotFound("User not found.");
 
-            return Ok(user);
+            var userDto = new UserDto
+            {
+                UID = user.UID,
+                FullName = $"{user.FirstName} {user.LastName}",
+                Email = user.Email,
+                PhoneNumber = user.PhoneNumber,
+                Username = user.Username,
+                ProfilePicture = user.ProfilePicture,
+                Role = Enum.IsDefined(typeof(UserRole), user.Role) ? ((UserRole)user.Role).ToString() : "Unknown",
+                CreatedAt = user.createdAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+            };
+
+            return Ok(userDto);
         }
-
-
-
-
 
 
     }
