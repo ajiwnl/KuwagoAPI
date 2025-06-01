@@ -1,20 +1,21 @@
 ﻿using KuwagoAPI.Helper;
 using KuwagoAPI.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using System.Text.Json;
-using static KuwagoAPI.Startup;
 
 namespace KuwagoAPI.Controllers.IdentityVerification
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class IdentityVerificationController : ControllerBase
     {
         private readonly CloudinaryService _cloudinaryService;
         private readonly IdentityVerificationService _verificationService;
         private readonly AuthService _authService;
         private readonly FaceVerificationService _faceVerificationService;
-
 
         public IdentityVerificationController(
             CloudinaryService cloudinaryService,
@@ -26,6 +27,11 @@ namespace KuwagoAPI.Controllers.IdentityVerification
             _verificationService = verificationService;
             _authService = authService;
             _faceVerificationService = faceVerificationService;
+        }
+
+        private string GetUserIdFromToken()
+        {
+            return User.FindFirstValue(ClaimTypes.NameIdentifier);
         }
 
         [HttpPost("UploadIDAndSelfie")]
@@ -41,17 +47,8 @@ namespace KuwagoAPI.Controllers.IdentityVerification
                 });
             }
 
-            if (!Request.Cookies.TryGetValue("session_token", out var sessionToken) || string.IsNullOrEmpty(sessionToken))
-            {
-                return Unauthorized(new StatusResponse
-                {
-                    Success = false,
-                    Message = "Session token missing or expired.",
-                    StatusCode = 401
-                });
-            }
-
-            var user = await _authService.GetUserByUIDAsync(sessionToken);
+            var uid = GetUserIdFromToken();
+            var user = await _authService.GetUserByUIDAsync(uid);
             if (user == null)
             {
                 return NotFound(new StatusResponse
@@ -73,11 +70,9 @@ namespace KuwagoAPI.Controllers.IdentityVerification
                 });
             }
 
-            // Upload both files
             var idUrl = await _cloudinaryService.UploadIDAndSelfieAsync(idPhoto);
             var selfieUrl = await _cloudinaryService.UploadIDAndSelfieAsync(selfiePhoto);
 
-            // Save both to Firestore
             await _verificationService.UploadIDPhotoAsync(user.UID, idUrl, selfieUrl);
 
             return Ok(new StatusResponse
@@ -88,20 +83,12 @@ namespace KuwagoAPI.Controllers.IdentityVerification
                 Data = new { idUrl, selfieUrl }
             });
         }
+
         [HttpGet("GetIdentityVerification")]
         public async Task<IActionResult> GetIdentityVerification()
         {
-            if (!Request.Cookies.TryGetValue("session_token", out var sessionToken) || string.IsNullOrEmpty(sessionToken))
-            {
-                return Unauthorized(new StatusResponse
-                {
-                    Success = false,
-                    Message = "Session token missing or expired.",
-                    StatusCode = 401
-                });
-            }
-
-            var user = await _authService.GetUserByUIDAsync(sessionToken);
+            var uid = GetUserIdFromToken();
+            var user = await _authService.GetUserByUIDAsync(uid);
             if (user == null)
             {
                 return NotFound(new StatusResponse
@@ -131,7 +118,7 @@ namespace KuwagoAPI.Controllers.IdentityVerification
                 Data = new
                 {
                     UID = user.UID,
-                    Name = user.FirstName + " " + user.LastName,
+                    Name = $"{user.FirstName} {user.LastName}",
                     Email = user.Email,
                     IDUrl = verification.IDUrl,
                     SelfieUrl = verification.SelfieUrl,
@@ -143,17 +130,8 @@ namespace KuwagoAPI.Controllers.IdentityVerification
         [HttpPost("VerifyFaceMatch")]
         public async Task<IActionResult> VerifyFaceMatch()
         {
-            if (!Request.Cookies.TryGetValue("session_token", out var sessionToken) || string.IsNullOrEmpty(sessionToken))
-            {
-                return Unauthorized(new StatusResponse
-                {
-                    Success = false,
-                    Message = "Session token missing or expired.",
-                    StatusCode = 401
-                });
-            }
-
-            var user = await _authService.GetUserByUIDAsync(sessionToken);
+            var uid = GetUserIdFromToken();
+            var user = await _authService.GetUserByUIDAsync(uid);
             if (user == null)
             {
                 return NotFound(new StatusResponse
@@ -185,7 +163,5 @@ namespace KuwagoAPI.Controllers.IdentityVerification
                 Data = JsonSerializer.Deserialize<object>(result)
             });
         }
-
-
     }
 }

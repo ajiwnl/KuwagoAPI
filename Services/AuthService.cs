@@ -4,6 +4,11 @@ using Google.Cloud.Firestore;
 using KuwagoAPI.Models;
 using System.ComponentModel.DataAnnotations;
 using KuwagoAPI.Helper;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using Newtonsoft.Json.Linq;
 
 namespace KuwagoAPI.Services
 {
@@ -17,6 +22,28 @@ namespace KuwagoAPI.Services
             _firebaseAuth = firebaseAuth;
             _firestoreDb = firestoreDb;
         }
+
+        public string GenerateJwtToken(string uid)
+        {
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var key = Encoding.UTF8.GetBytes("a-string-secret-at-least-256-bits-long");
+
+            var tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(new[]
+                {
+            new Claim(ClaimTypes.NameIdentifier, uid)
+        }),
+                Expires = DateTime.UtcNow.AddMinutes(5),
+                Issuer = "KuwagoAPI",
+                Audience = "KuwagoClient",
+                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+            };
+
+            var token = tokenHandler.CreateToken(tokenDescriptor);
+            return tokenHandler.WriteToken(token);
+        }
+
 
         public async Task<StatusResponse> RegisterUserAsync(RegisterRequest request)
         {
@@ -103,7 +130,7 @@ namespace KuwagoAPI.Services
                 { 
                     Success = true,
                     Message = "Registration successful! Please verify your email.",
-                    StatusCode = 201 // Created
+                    StatusCode = 201
                 };
             }
             catch (Firebase.Auth.FirebaseAuthException ex)
@@ -159,8 +186,9 @@ namespace KuwagoAPI.Services
                 return new StatusResponse
                 {
                     Success = true,
-                    Message = user.LocalId, // You can change this if needed
-                    StatusCode = 200
+                    Message = user.LocalId,
+                    StatusCode = 200,
+                    Data = new { UID = user.LocalId }
                 };
             }
             catch (Firebase.Auth.FirebaseAuthException ex)
