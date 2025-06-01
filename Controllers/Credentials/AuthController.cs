@@ -2,6 +2,7 @@
 using KuwagoAPI.Helper;
 using KuwagoAPI.Models;
 using KuwagoAPI.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -32,61 +33,58 @@ namespace KuwagoAPI.Controllers.Credentials
             return StatusCode(result.StatusCode, result);
         }
 
-
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
             var result = await _authService.LoginUserAsync(request.Email, request.Password);
 
             if (!result.Success)
-                return StatusCode(result.StatusCode, new StatusResponse
-                {
-                    Success = false,
-                    Message = result.Message,
-                    StatusCode = result.StatusCode
-                });
+                return Unauthorized(result);
 
-            // Set a cookie with 10-minute expiration
-            var cookieOptions = new CookieOptions
+            // Extract UID from Data dictionary/object
+            string uid = "";
+
+            if (result.Data != null)
             {
-                HttpOnly = true,
-                Secure = true, //Set to false
-                Expires = DateTime.UtcNow.AddMinutes(10),
-                SameSite = SameSiteMode.Strict //SameSiteMode.None
-            };
+               
+                var dataDict = result.Data as IDictionary<string, object>;
+                if (dataDict != null && dataDict.ContainsKey("UID"))
+                {
+                    uid = dataDict["UID"].ToString();
+                }
+                else
+                {
+                    dynamic d = result.Data;
+                    uid = d?.UID;
+                }
+            }
 
-            Response.Cookies.Append("session_token", result.Message, cookieOptions);
+            var token = _authService.GenerateJwtToken(uid);
+
 
             return Ok(new StatusResponse
             {
                 Success = true,
-                Message = "Login successful!",
-                StatusCode = 200
+                Message = "Login successful",
+                StatusCode = 200,
+                Data = new { Token = token}
             });
         }
 
+
+        [Authorize]
         [HttpPost("logout")]
         public IActionResult Logout()
         {
-            if (Request.Cookies["session_token"] != null)
-            {
-                Response.Cookies.Delete("session_token");
-                return Ok(new StatusResponse
-                {
-                    Success = true,
-                    Message = "User logged out successfully.",
-                    StatusCode = 200
-                });
-            }
-
+        
             return Ok(new StatusResponse
             {
                 Success = false,
                 Message = "No active session found.",
                 StatusCode = 400
             });
-
         }
+
 
         [HttpPost("ForgotPassword")]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPassRequest request)
@@ -111,28 +109,33 @@ namespace KuwagoAPI.Controllers.Credentials
             });
         }
 
+        [Authorize]
         [HttpGet("GetUser")]
-        public async Task<IActionResult> GetUserFromCookie()
+        public async Task<IActionResult> GetUser()
         {
-            if (!Request.Cookies.TryGetValue("session_token", out var sessionToken) || string.IsNullOrEmpty(sessionToken))
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            if (string.IsNullOrEmpty(userId))
             {
                 return Unauthorized(new StatusResponse
                 {
                     Success = false,
-                    Message = "Session token missing or expired.",
+                    Message = "User ID missing from token.",
                     StatusCode = 401
                 });
             }
 
-            var user = await _authService.GetUserByUIDAsync(sessionToken);
+            var user = await _authService.GetUserByUIDAsync(userId);
 
             if (user == null)
-                return Unauthorized(new StatusResponse
+            {
+                return NotFound(new StatusResponse
                 {
                     Success = false,
                     Message = "User not found.",
-                    StatusCode = 400
+                    StatusCode = 404
                 });
+            }
 
             var userDto = new UserDto
             {
@@ -150,11 +153,13 @@ namespace KuwagoAPI.Controllers.Credentials
             {
                 Success = true,
                 Message = "User Data fetched successfully.",
-                StatusCode = 201,
+                StatusCode = 200,
                 Data = userDto
-
             });
         }
+
+
+
 
 
     }
