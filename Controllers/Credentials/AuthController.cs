@@ -43,9 +43,9 @@ namespace KuwagoAPI.Controllers.Credentials
             var cookieOptions = new CookieOptions
             {
                 HttpOnly = true,
-                Secure = true,
+                Secure = true, //Set to false
                 Expires = DateTime.UtcNow.AddMinutes(10),
-                SameSite = SameSiteMode.Strict
+                SameSite = SameSiteMode.Strict //SameSiteMode.None
             };
 
             Response.Cookies.Append("session_token", result.Message, cookieOptions);
@@ -75,6 +75,24 @@ namespace KuwagoAPI.Controllers.Credentials
 
             return Ok(result.Message);
         }
+
+        [HttpGet("GetUser")]
+        public async Task<IActionResult> GetUserFromCookie()
+        {
+            if (!Request.Cookies.TryGetValue("session_token", out var sessionToken) || string.IsNullOrEmpty(sessionToken))
+            {
+                return Unauthorized("Session token missing or expired.");
+            }
+
+            var user = await _authService.GetUserByUIDAsync(sessionToken);
+
+            if (user == null)
+                return NotFound("User not found.");
+
+            return Ok(user);
+        }
+
+
 
 
 
