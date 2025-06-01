@@ -1,6 +1,7 @@
 ﻿using KuwagoAPI.Helper;
 using KuwagoAPI.Services;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 using static KuwagoAPI.Startup;
 
 namespace KuwagoAPI.Controllers.IdentityVerification
@@ -12,15 +13,19 @@ namespace KuwagoAPI.Controllers.IdentityVerification
         private readonly CloudinaryService _cloudinaryService;
         private readonly IdentityVerificationService _verificationService;
         private readonly AuthService _authService;
+        private readonly FaceVerificationService _faceVerificationService;
+
 
         public IdentityVerificationController(
             CloudinaryService cloudinaryService,
             IdentityVerificationService verificationService,
-            AuthService authService)
+            AuthService authService,
+            FaceVerificationService faceVerificationService)
         {
             _cloudinaryService = cloudinaryService;
             _verificationService = verificationService;
             _authService = authService;
+            _faceVerificationService = faceVerificationService;
         }
 
         [HttpPost("UploadIDAndSelfie")]
@@ -84,56 +89,103 @@ namespace KuwagoAPI.Controllers.IdentityVerification
             });
         }
         [HttpGet("GetIdentityVerification")]
-public async Task<IActionResult> GetIdentityVerification()
-{
-    if (!Request.Cookies.TryGetValue("session_token", out var sessionToken) || string.IsNullOrEmpty(sessionToken))
-    {
-        return Unauthorized(new StatusResponse
+        public async Task<IActionResult> GetIdentityVerification()
         {
-            Success = false,
-            Message = "Session token missing or expired.",
-            StatusCode = 401
-        });
-    }
+            if (!Request.Cookies.TryGetValue("session_token", out var sessionToken) || string.IsNullOrEmpty(sessionToken))
+            {
+                return Unauthorized(new StatusResponse
+                {
+                    Success = false,
+                    Message = "Session token missing or expired.",
+                    StatusCode = 401
+                });
+            }
 
-    var user = await _authService.GetUserByUIDAsync(sessionToken);
-    if (user == null)
-    {
-        return NotFound(new StatusResponse
-        {
-            Success = false,
-            Message = "User not found.",
-            StatusCode = 404
-        });
-    }
+            var user = await _authService.GetUserByUIDAsync(sessionToken);
+            if (user == null)
+            {
+                return NotFound(new StatusResponse
+                {
+                    Success = false,
+                    Message = "User not found.",
+                    StatusCode = 404
+                });
+            }
 
-    var verification = await _verificationService.GetIdentityVerificationAsync(user.UID);
-    if (verification == null)
-    {
-        return NotFound(new StatusResponse
-        {
-            Success = false,
-            Message = "Identity verification data not found.",
-            StatusCode = 404
-        });
-    }
+            var verification = await _verificationService.GetIdentityVerificationAsync(user.UID);
+            if (verification == null)
+            {
+                return NotFound(new StatusResponse
+                {
+                    Success = false,
+                    Message = "Identity verification data not found.",
+                    StatusCode = 404
+                });
+            }
 
-    return Ok(new StatusResponse
-    {
-        Success = true,
-        Message = "Identity verification data retrieved successfully.",
-        StatusCode = 200,
-        Data = new
-        {
-            UID = user.UID,
-            Name = user.FirstName + " " + user.LastName,
-            Email = user.Email,
-            IDUrl = verification.IDUrl,
-            SelfieUrl = verification.SelfieUrl,
-            UploadedAt = verification.UploadedAt.ToDateTime()
+            return Ok(new StatusResponse
+            {
+                Success = true,
+                Message = "Identity verification data retrieved successfully.",
+                StatusCode = 200,
+                Data = new
+                {
+                    UID = user.UID,
+                    Name = user.FirstName + " " + user.LastName,
+                    Email = user.Email,
+                    IDUrl = verification.IDUrl,
+                    SelfieUrl = verification.SelfieUrl,
+                    UploadedAt = verification.UploadedAt.ToDateTime()
+                }
+            });
         }
-    });
-}   
+
+        [HttpPost("VerifyFaceMatch")]
+        public async Task<IActionResult> VerifyFaceMatch()
+        {
+            if (!Request.Cookies.TryGetValue("session_token", out var sessionToken) || string.IsNullOrEmpty(sessionToken))
+            {
+                return Unauthorized(new StatusResponse
+                {
+                    Success = false,
+                    Message = "Session token missing or expired.",
+                    StatusCode = 401
+                });
+            }
+
+            var user = await _authService.GetUserByUIDAsync(sessionToken);
+            if (user == null)
+            {
+                return NotFound(new StatusResponse
+                {
+                    Success = false,
+                    Message = "User not found.",
+                    StatusCode = 404
+                });
+            }
+
+            var verification = await _verificationService.GetIdentityVerificationAsync(user.UID);
+            if (verification == null)
+            {
+                return NotFound(new StatusResponse
+                {
+                    Success = false,
+                    Message = "Identity photos not found.",
+                    StatusCode = 404
+                });
+            }
+
+            var result = await _faceVerificationService.VerifyFaceMatchAsync(verification.IDUrl, verification.SelfieUrl);
+
+            return Ok(new StatusResponse
+            {
+                Success = true,
+                Message = "Face verification completed.",
+                StatusCode = 200,
+                Data = JsonSerializer.Deserialize<object>(result)
+            });
+        }
+
 
     }
 }
