@@ -92,7 +92,6 @@ namespace KuwagoAPI.Services
                     Email = request.Email,
                     PhoneNumber = request.PhoneNumber,
                     ProfilePicture = "https://i.pinimg.com/474x/e6/e4/df/e6e4df26ba752161b9fc6a17321fa286.jpg",
-                    Password = request.Password,
                     Username = request.Username,
                     createdAt = Timestamp.FromDateTime(DateTime.UtcNow),
                     Role = role
