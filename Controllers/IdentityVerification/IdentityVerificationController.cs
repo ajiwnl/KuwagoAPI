@@ -23,19 +23,69 @@ namespace KuwagoAPI.Controllers.IdentityVerification
             _authService = authService;
         }
 
-       [HttpPost("UploadIDAndSelfie")]
-public async Task<IActionResult> UploadIDAndSelfie(IFormFile idPhoto, IFormFile selfiePhoto)
-{
-    if (idPhoto == null || idPhoto.Length == 0 || selfiePhoto == null || selfiePhoto.Length == 0)
-    {
-        return BadRequest(new StatusResponse
+        [HttpPost("UploadIDAndSelfie")]
+        public async Task<IActionResult> UploadIDAndSelfie(IFormFile idPhoto, IFormFile selfiePhoto)
         {
-            Success = false,
-            Message = "Both ID and Selfie photos are required.",
-            StatusCode = 400
-        });
-    }
+            if (idPhoto == null || idPhoto.Length == 0 || selfiePhoto == null || selfiePhoto.Length == 0)
+            {
+                return BadRequest(new StatusResponse
+                {
+                    Success = false,
+                    Message = "Both ID and Selfie photos are required.",
+                    StatusCode = 400
+                });
+            }
 
+            if (!Request.Cookies.TryGetValue("session_token", out var sessionToken) || string.IsNullOrEmpty(sessionToken))
+            {
+                return Unauthorized(new StatusResponse
+                {
+                    Success = false,
+                    Message = "Session token missing or expired.",
+                    StatusCode = 401
+                });
+            }
+
+            var user = await _authService.GetUserByUIDAsync(sessionToken);
+            if (user == null)
+            {
+                return NotFound(new StatusResponse
+                {
+                    Success = false,
+                    Message = "User not found.",
+                    StatusCode = 404
+                });
+            }
+
+            var alreadyUploaded = await _verificationService.IDAlreadyUploadedAsync(user.UID);
+            if (alreadyUploaded)
+            {
+                return Conflict(new StatusResponse
+                {
+                    Success = false,
+                    Message = "Identity documents were already uploaded.",
+                    StatusCode = 409
+                });
+            }
+
+            // Upload both files
+            var idUrl = await _cloudinaryService.UploadIDAndSelfieAsync(idPhoto);
+            var selfieUrl = await _cloudinaryService.UploadIDAndSelfieAsync(selfiePhoto);
+
+            // Save both to Firestore
+            await _verificationService.UploadIDPhotoAsync(user.UID, idUrl, selfieUrl);
+
+            return Ok(new StatusResponse
+            {
+                Success = true,
+                Message = "ID and Selfie uploaded successfully.",
+                StatusCode = 200,
+                Data = new { idUrl, selfieUrl }
+            });
+        }
+        [HttpGet("GetIdentityVerification")]
+public async Task<IActionResult> GetIdentityVerification()
+{
     if (!Request.Cookies.TryGetValue("session_token", out var sessionToken) || string.IsNullOrEmpty(sessionToken))
     {
         return Unauthorized(new StatusResponse
@@ -57,34 +107,33 @@ public async Task<IActionResult> UploadIDAndSelfie(IFormFile idPhoto, IFormFile 
         });
     }
 
-    var alreadyUploaded = await _verificationService.IDAlreadyUploadedAsync(user.UID);
-    if (alreadyUploaded)
+    var verification = await _verificationService.GetIdentityVerificationAsync(user.UID);
+    if (verification == null)
     {
-        return Conflict(new StatusResponse
+        return NotFound(new StatusResponse
         {
             Success = false,
-            Message = "Identity documents were already uploaded.",
-            StatusCode = 409
+            Message = "Identity verification data not found.",
+            StatusCode = 404
         });
     }
-
-    // Upload both files
-    var idUrl = await _cloudinaryService.UploadIDAndSelfieAsync(idPhoto);
-    var selfieUrl = await _cloudinaryService.UploadIDAndSelfieAsync(selfiePhoto);
-
-    // Save both to Firestore
-    await _verificationService.UploadIDPhotoAsync(user.UID, idUrl, selfieUrl);
 
     return Ok(new StatusResponse
     {
         Success = true,
-        Message = "ID and Selfie uploaded successfully.",
+        Message = "Identity verification data retrieved successfully.",
         StatusCode = 200,
-        Data = new { idUrl, selfieUrl }
+        Data = new
+        {
+            UID = user.UID,
+            Name = user.FirstName + " " + user.LastName,
+            Email = user.Email,
+            IDUrl = verification.IDUrl,
+            SelfieUrl = verification.SelfieUrl,
+            UploadedAt = verification.UploadedAt.ToDateTime()
+        }
     });
-}
-
-
+}   
 
     }
 }
