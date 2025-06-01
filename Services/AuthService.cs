@@ -83,13 +83,14 @@ namespace KuwagoAPI.Services
                     ProfilePicture = "https://i.pinimg.com/474x/e6/e4/df/e6e4df26ba752161b9fc6a17321fa286.jpg",
                     Password = request.Password,
                     Username = request.Username,
-                    createdAt = Timestamp.FromDateTime(DateTime.UtcNow)
+                    createdAt = Timestamp.FromDateTime(DateTime.UtcNow),
+                    Role = "User"
                 };
 
                 await docRef.SetAsync(user);
 
                 return new StatusResponse
-                {
+                { 
                     Success = true,
                     Message = "Registration successful! Please verify your email.",
                     StatusCode = 201 // Created
@@ -203,6 +204,18 @@ namespace KuwagoAPI.Services
                 };
             }
         }
+
+        public async Task<mUser?> GetUserByUIDAsync(string uid)
+        {
+            var docRef = _firestoreDb.Collection("Users").Document(uid);
+            var snapshot = await docRef.GetSnapshotAsync();
+
+            if (!snapshot.Exists)
+                return null;
+
+            return snapshot.ConvertTo<mUser>();
+        }
+
 
     }
 }
