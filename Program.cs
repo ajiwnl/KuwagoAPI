@@ -104,7 +104,7 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-startup.Configure(app, app.Environment); // Keep this if it's configuring services only
+startup.Configure(app, app.Environment);
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
