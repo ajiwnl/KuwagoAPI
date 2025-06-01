@@ -64,6 +64,17 @@ namespace KuwagoAPI.Services
                 };
             }
 
+            int role = request.Role ?? (int)UserRole.User;
+            if (!Enum.IsDefined(typeof(UserRole), role))
+            {
+                return new StatusResponse
+                {
+                    Success = false,
+                    Message = "Invalid user role.",
+                    StatusCode = 400
+                };
+            }
+
 
             try
             {
@@ -84,7 +95,7 @@ namespace KuwagoAPI.Services
                     Password = request.Password,
                     Username = request.Username,
                     createdAt = Timestamp.FromDateTime(DateTime.UtcNow),
-                    Role = "User"
+                    Role = role
                 };
 
                 await docRef.SetAsync(user);
