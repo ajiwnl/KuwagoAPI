@@ -158,6 +158,20 @@ namespace KuwagoAPI.Controllers.Credentials
             });
         }
 
+        [Authorize]
+        [HttpGet("CheckTokenStatus")]
+        public IActionResult CheckJwt()
+        {
+            return Ok(new StatusResponse
+            {
+                Success = true,
+                Message = "JWT is valid.",
+                StatusCode = 200
+            });
+        }
+
+
+
 
 
 
