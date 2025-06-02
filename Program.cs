@@ -100,6 +100,13 @@ builder.Services.AddAuthorization(options =>
             var roleClaim = context.User.FindFirst(ClaimTypes.Role)?.Value;
             return roleClaim == "0"|| roleClaim == "2"|| roleClaim == "2";
         }));
+
+    options.AddPolicy("AdminOnly", policy =>
+       policy.RequireAssertion(context =>
+       {
+           var roleClaim = context.User.FindFirst(ClaimTypes.Role)?.Value;
+           return roleClaim == "0";
+       }));
 });
 
 
