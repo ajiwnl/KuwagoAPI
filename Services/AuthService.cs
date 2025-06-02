@@ -34,7 +34,7 @@ namespace KuwagoAPI.Services
                 {
             new Claim(ClaimTypes.NameIdentifier, uid)
         }),
-                Expires = DateTime.UtcNow.AddMinutes(5),
+                Expires = DateTime.UtcNow.AddMinutes(60),
                 Issuer = "KuwagoAPI",
                 Audience = "KuwagoClient",
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)

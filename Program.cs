@@ -32,36 +32,49 @@ builder.Services.AddAuthentication(options =>
     {
         OnAuthenticationFailed = context =>
         {
-            if (context.Exception is SecurityTokenExpiredException)
+            context.Response.StatusCode = 401;
+            context.Response.ContentType = "application/json";
+
+            string message = context.Exception is SecurityTokenExpiredException
+                ? "Token has expired."
+                : "Invalid token.";
+
+            var result = System.Text.Json.JsonSerializer.Serialize(new
             {
+                success = false,
+                statusCode = 401,
+                message = message
+            });
+
+            return context.Response.WriteAsync(result);
+        },
+        OnChallenge = context =>
+        {
+            if (!context.Response.HasStarted)
+            {
+                context.HandleResponse();
                 context.Response.StatusCode = 401;
                 context.Response.ContentType = "application/json";
+
                 var result = System.Text.Json.JsonSerializer.Serialize(new
                 {
                     success = false,
                     statusCode = 401,
-                    message = "Token has expired."
+                    message = "Token is missing or not authorized."
                 });
+
                 return context.Response.WriteAsync(result);
             }
 
-            context.Response.StatusCode = 401;
-            context.Response.ContentType = "application/json";
-            var genericResult = System.Text.Json.JsonSerializer.Serialize(new
-            {
-                success = false,
-                statusCode = 401,
-                message = "Invalid token."
-            });
-            return context.Response.WriteAsync(genericResult);
+            return Task.CompletedTask;
         },
-
         OnTokenValidated = context =>
         {
             Debug.WriteLine("Token successfully validated.");
             return Task.CompletedTask;
         }
     };
+
 });
 
 builder.Services.AddAuthorization();
