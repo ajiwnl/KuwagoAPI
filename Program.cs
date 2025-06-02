@@ -98,7 +98,7 @@ builder.Services.AddAuthorization(options =>
         policy.RequireAssertion(context =>
         {
             var roleClaim = context.User.FindFirst(ClaimTypes.Role)?.Value;
-            return roleClaim == "0"|| roleClaim == "2"|| roleClaim == "2";
+            return roleClaim == "0"|| roleClaim == "1"|| roleClaim == "2";
         }));
 
     options.AddPolicy("AdminOnly", policy =>
@@ -107,6 +107,25 @@ builder.Services.AddAuthorization(options =>
            var roleClaim = context.User.FindFirst(ClaimTypes.Role)?.Value;
            return roleClaim == "0";
        }));
+
+    options.AddPolicy("BorrowerOnly", policy =>
+     policy.RequireAssertion(context =>
+     {
+         var roleClaim = context.User.FindFirst(ClaimTypes.Role)?.Value;
+         return roleClaim == "2";
+     }));
+    options.AddPolicy("LenderOnly", policy =>
+   policy.RequireAssertion(context =>
+   {
+       var roleClaim = context.User.FindFirst(ClaimTypes.Role)?.Value;
+       return roleClaim == "1";
+   }));
+    options.AddPolicy("LenderOnly", policy =>
+  policy.RequireAssertion(context =>
+  {
+      var roleClaim = context.User.FindFirst(ClaimTypes.Role)?.Value;
+      return roleClaim == "0";
+  }));
 });
 
 

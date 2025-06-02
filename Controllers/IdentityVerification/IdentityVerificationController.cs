@@ -9,7 +9,6 @@ namespace KuwagoAPI.Controllers.IdentityVerification
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize]
     public class IdentityVerificationController : ControllerBase
     {
         private readonly CloudinaryService _cloudinaryService;
@@ -34,6 +33,7 @@ namespace KuwagoAPI.Controllers.IdentityVerification
             return User.FindFirstValue(ClaimTypes.NameIdentifier);
         }
 
+        [Authorize(Policy = "BorrowerOnly")]
         [HttpPost("UploadIDAndSelfie")]
         public async Task<IActionResult> UploadIDAndSelfie(IFormFile idPhoto, IFormFile selfiePhoto)
         {
@@ -84,7 +84,8 @@ namespace KuwagoAPI.Controllers.IdentityVerification
             });
         }
 
-        [HttpGet("GetIdentityVerification")]
+        [Authorize(Policy = "BorrowerOnly")]
+        [HttpGet("GetIdentityLoggedInVerification")]
         public async Task<IActionResult> GetIdentityVerification()
         {
             var uid = GetUserIdFromToken();
@@ -126,7 +127,7 @@ namespace KuwagoAPI.Controllers.IdentityVerification
                 }
             });
         }
-
+        [Authorize(Policy = "BorrowerOnly")]
         [HttpPost("VerifyFaceMatch")]
         public async Task<IActionResult> VerifyFaceMatch()
         {
