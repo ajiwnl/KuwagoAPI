@@ -102,8 +102,8 @@ namespace KuwagoAPI.Controllers.Credentials
         }
 
         [Authorize(Policy = "AdminLendersBorrowers")]
-        [HttpGet("GetUser")]
-        public async Task<IActionResult> GetUser()
+        [HttpGet("GetUserLoggedInInfo")]
+        public async Task<IActionResult> GetUserLoggedInInfo()
         {
             var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
@@ -149,6 +149,65 @@ namespace KuwagoAPI.Controllers.Credentials
                 Data = userDto
             });
         }
+
+        [Authorize(Policy = "AdminOnly")]
+        [HttpGet("GetSpecificUser")]
+        public async Task<IActionResult> GetSpecificUser(
+    [FromQuery] string? UID,
+    [FromQuery] string? LastName,
+    [FromQuery] string? Email,
+    [FromQuery] int? Role) 
+        {
+            var users = await _authService.GetAllUsersAsync(UID, LastName, Email, Role);
+
+            var userDtos = users.Select(user => new UserDto
+            {
+                UID = user.UID,
+                FullName = $"{user.FirstName} {user.LastName}",
+                Email = user.Email,
+                PhoneNumber = user.PhoneNumber,
+                Username = user.Username,
+                ProfilePicture = user.ProfilePicture,
+                Role = Enum.IsDefined(typeof(UserRole), user.Role) ? ((UserRole)user.Role).ToString() : "Unknown",
+                CreatedAt = user.createdAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+            }).ToList();
+
+            return Ok(new StatusResponse
+            {
+                Success = true,
+                Message = $"Retrieved {userDtos.Count} user(s).",
+                StatusCode = 200,
+                Data = userDtos
+            });
+        }
+
+        [Authorize(Policy = "AdminOnly")]
+        [HttpGet("GetAllUser")]
+        public async Task<IActionResult> GetAllUser()
+        {
+            var users = await _authService.GetAllUsersAsync(); // No parameters = get all
+
+            var userDtos = users.Select(user => new UserDto
+            {
+                UID = user.UID,
+                FullName = $"{user.FirstName} {user.LastName}",
+                Email = user.Email,
+                PhoneNumber = user.PhoneNumber,
+                Username = user.Username,
+                ProfilePicture = user.ProfilePicture,
+                Role = Enum.IsDefined(typeof(UserRole), user.Role) ? ((UserRole)user.Role).ToString() : "Unknown",
+                CreatedAt = user.createdAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+            }).ToList();
+
+            return Ok(new StatusResponse
+            {
+                Success = true,
+                Message = $"Retrieved {userDtos.Count} user(s).",
+                StatusCode = 200,
+                Data = userDtos
+            });
+        }
+
 
         [Authorize]
         [HttpGet("CheckTokenStatus")]

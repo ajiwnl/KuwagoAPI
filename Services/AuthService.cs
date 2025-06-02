@@ -256,6 +256,38 @@ namespace KuwagoAPI.Services
             return snapshot.ConvertTo<mUser>();
         }
 
+        public async Task<List<mUser>> GetAllUsersAsync(string? UID = null, string? LastName = null, string? Email = null, int? Role = null)
+        {
+            CollectionReference usersRef = _firestoreDb.Collection("Users");
+
+            // If UID is provided, fetch by document ID (cannot combine with other filters)
+            if (!string.IsNullOrEmpty(UID))
+            {
+                DocumentSnapshot snapshot = await usersRef.Document(UID).GetSnapshotAsync();
+                if (snapshot.Exists)
+                {
+                    return new List<mUser> { snapshot.ConvertTo<mUser>() };
+                }
+                return new List<mUser>();
+            }
+
+            Query query = usersRef;
+
+            if (!string.IsNullOrEmpty(LastName))
+                query = query.WhereEqualTo("LastName", LastName);
+
+            if (!string.IsNullOrEmpty(Email))
+                query = query.WhereEqualTo("Email", Email);
+
+            if (Role.HasValue)
+                query = query.WhereEqualTo("Role", Role.Value);
+
+            var snapshotList = await query.GetSnapshotAsync();
+            return snapshotList.Documents.Select(doc => doc.ConvertTo<mUser>()).ToList();
+        }
+
+
+
 
     }
 }
