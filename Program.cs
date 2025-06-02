@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Diagnostics;
+using System.Security.Claims;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -72,12 +73,35 @@ builder.Services.AddAuthentication(options =>
         {
             Debug.WriteLine("Token successfully validated.");
             return Task.CompletedTask;
+        },
+        OnForbidden = context =>
+        {
+            context.Response.StatusCode = 403;
+            context.Response.ContentType = "application/json";
+
+            var result = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                success = false,
+                statusCode = 403,
+                message = "You do not have permission to access this resource."
+            });
+
+            return context.Response.WriteAsync(result);
         }
     };
 
 });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminLendersBorrowers", policy =>
+        policy.RequireAssertion(context =>
+        {
+            var roleClaim = context.User.FindFirst(ClaimTypes.Role)?.Value;
+            return roleClaim == "0"|| roleClaim == "2"|| roleClaim == "2";
+        }));
+});
+
 
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle

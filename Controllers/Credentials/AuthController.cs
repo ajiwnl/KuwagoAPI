@@ -41,35 +41,27 @@ namespace KuwagoAPI.Controllers.Credentials
             if (!result.Success)
                 return Unauthorized(result);
 
-            // Extract UID from Data dictionary/object
             string uid = "";
+            if (result.Data is IDictionary<string, object> dataDict && dataDict.ContainsKey("UID"))
+                uid = dataDict["UID"].ToString();
+            else
+                uid = ((dynamic)result.Data)?.UID;
 
-            if (result.Data != null)
-            {
-               
-                var dataDict = result.Data as IDictionary<string, object>;
-                if (dataDict != null && dataDict.ContainsKey("UID"))
-                {
-                    uid = dataDict["UID"].ToString();
-                }
-                else
-                {
-                    dynamic d = result.Data;
-                    uid = d?.UID;
-                }
-            }
+            var user = await _authService.GetUserByUIDAsync(uid);
+            if (user == null)
+                return Unauthorized("User not found");
 
-            var token = _authService.GenerateJwtToken(uid);
-
+            var token = _authService.GenerateJwtToken(uid, user.Role);
 
             return Ok(new StatusResponse
             {
                 Success = true,
                 Message = "Login successful",
                 StatusCode = 200,
-                Data = new { Token = token}
+                Data = new { Token = token }
             });
         }
+
 
 
         [Authorize]
@@ -109,7 +101,7 @@ namespace KuwagoAPI.Controllers.Credentials
             });
         }
 
-        [Authorize]
+        [Authorize(Policy = "AdminLendersBorrowers")]
         [HttpGet("GetUser")]
         public async Task<IActionResult> GetUser()
         {

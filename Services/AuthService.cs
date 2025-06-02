@@ -23,7 +23,7 @@ namespace KuwagoAPI.Services
             _firestoreDb = firestoreDb;
         }
 
-        public string GenerateJwtToken(string uid)
+        public string GenerateJwtToken(string uid, int role)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.UTF8.GetBytes("a-string-secret-at-least-256-bits-long");
@@ -32,7 +32,8 @@ namespace KuwagoAPI.Services
             {
                 Subject = new ClaimsIdentity(new[]
                 {
-            new Claim(ClaimTypes.NameIdentifier, uid)
+            new Claim(ClaimTypes.NameIdentifier, uid),
+            new Claim(ClaimTypes.Role, role.ToString())
         }),
                 Expires = DateTime.UtcNow.AddMinutes(60),
                 Issuer = "KuwagoAPI",
@@ -43,6 +44,7 @@ namespace KuwagoAPI.Services
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
         }
+
 
 
         public async Task<StatusResponse> RegisterUserAsync(RegisterRequest request)
@@ -91,7 +93,7 @@ namespace KuwagoAPI.Services
                 };
             }
 
-            int role = request.Role ?? (int)UserRole.User;
+            int role = request.Role ?? (int)UserRole.Borrower;
             if (!Enum.IsDefined(typeof(UserRole), role))
             {
                 return new StatusResponse

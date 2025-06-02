@@ -2,8 +2,8 @@
 {
     public enum UserRole
     {
-        SuperAdmin = 0,
-        Admin = 1,
-        User = 2
+        Admin = 0,
+        Lenders = 1,
+        Borrower = 2
     }
 }
