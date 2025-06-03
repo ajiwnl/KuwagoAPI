@@ -210,14 +210,41 @@ namespace KuwagoAPI.Controllers.Credentials
 
 
         [Authorize]
-        [HttpGet("CheckTokenStatus")]
+        [HttpGet("CheckToken")]
         public IActionResult CheckJwt()
         {
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (authHeader == null || !authHeader.StartsWith("Bearer "))
+            {
+                return Unauthorized(new StatusResponse
+                {
+                    Success = false,
+                    Message = "Missing or invalid Authorization header.",
+                    StatusCode = 401
+                });
+            }
+
+            var token = authHeader.Substring("Bearer ".Length).Trim();
+            var principal = JwtHelper.ValidateAndDecodeToken(token, "a-string-secret-at-least-256-bits-long");
+
+            if (principal == null)
+            {
+                return Unauthorized(new StatusResponse
+                {
+                    Success = false,
+                    Message = "Invalid or expired token.",
+                    StatusCode = 401
+                });
+            }
+
+            var claims = principal.Claims.ToDictionary(c => c.Type, c => c.Value);
+
             return Ok(new StatusResponse
             {
                 Success = true,
                 Message = "JWT is valid.",
-                StatusCode = 200
+                StatusCode = 200,
+                Data = claims
             });
         }
 
