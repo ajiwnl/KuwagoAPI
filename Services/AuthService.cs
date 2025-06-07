@@ -434,6 +434,11 @@ namespace KuwagoAPI.Services
             }
         }
 
+        public async Task UpdateUserProfilePictureAsync(string uid, string imageUrl)
+        {
+            var userDocRef = _firestoreDb.Collection("Users").Document(uid);
+            await userDocRef.UpdateAsync("ProfilePicture", imageUrl);
+        }
 
 
 

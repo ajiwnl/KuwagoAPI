@@ -5,6 +5,7 @@ using KuwagoAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace KuwagoAPI.Controllers.Credentials
 {
@@ -13,10 +14,14 @@ namespace KuwagoAPI.Controllers.Credentials
     public class AuthController : ControllerBase
     {
         private readonly AuthService _authService;
+        private readonly CloudinaryService _cloudinaryService;
 
-        public AuthController(AuthService authService)
+
+        public AuthController(AuthService authService, CloudinaryService cloudinaryService)
         {
+            _cloudinaryService = cloudinaryService;
             _authService = authService;
+
         }
 
         [HttpPost("register")]
@@ -323,6 +328,67 @@ namespace KuwagoAPI.Controllers.Credentials
             var result = await _authService.ChangePasswordAsync(uid, request.NewPassword);
             return StatusCode(result.StatusCode, result);
         }
+
+        [Authorize(Policy = "AdminLendersBorrowers")]
+        [HttpPost("UploadProfilePicture")]
+        public async Task<IActionResult> UploadProfilePicture(IFormFile profilePicture)
+        {
+            var uid = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(uid))
+            {
+                return Unauthorized(new StatusResponse
+                {
+                    Success = false,
+                    Message = "UID not found in token.",
+                    StatusCode = 401
+                });
+            }
+
+            if (profilePicture == null || profilePicture.Length == 0)
+            {
+                return BadRequest(new StatusResponse
+                {
+                    Success = false,
+                    Message = "Profile picture file is required.",
+                    StatusCode = 400
+                });
+            }
+
+            // Validate MIME type
+            var allowedMimeTypes = new[] { "image/jpeg", "image/png", "image/webp", "image/jpg" };
+            if (!allowedMimeTypes.Contains(profilePicture.ContentType.ToLower()))
+            {
+                return BadRequest(new StatusResponse
+                {
+                    Success = false,
+                    Message = "Only image files (JPEG, PNG, JPG, WEBP) are allowed.",
+                    StatusCode = 400
+                });
+            }
+
+            var user = await _authService.GetUserByUIDAsync(uid);
+            if (user == null)
+            {
+                return NotFound(new StatusResponse
+                {
+                    Success = false,
+                    Message = "User not found.",
+                    StatusCode = 404
+                });
+            }
+
+            var profilePicUrl = await _cloudinaryService.UploadIDAndSelfieAsync(profilePicture);
+            await _authService.UpdateUserProfilePictureAsync(uid, profilePicUrl);
+
+            return Ok(new StatusResponse
+            {
+                Success = true,
+                Message = "Profile picture uploaded successfully.",
+                StatusCode = 200,
+                Data = new { profilePicUrl }
+            });
+        }
+
 
 
 
