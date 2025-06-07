@@ -138,7 +138,9 @@ namespace KuwagoAPI.Controllers.Credentials
                 Username = user.Username,
                 ProfilePicture = user.ProfilePicture,
                 Role = Enum.IsDefined(typeof(UserRole), user.Role) ? ((UserRole)user.Role).ToString() : "Unknown",
-                CreatedAt = user.createdAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+                CreatedAt = user.createdAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss"),
+                Status = Enum.IsDefined(typeof(UserStatus), user.Status) ? ((UserStatus)user.Status).ToString() : "Unknown"
+
             };
 
             return Ok(new StatusResponse
@@ -169,7 +171,9 @@ namespace KuwagoAPI.Controllers.Credentials
                 Username = user.Username,
                 ProfilePicture = user.ProfilePicture,
                 Role = Enum.IsDefined(typeof(UserRole), user.Role) ? ((UserRole)user.Role).ToString() : "Unknown",
-                CreatedAt = user.createdAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+                CreatedAt = user.createdAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss"),
+                Status = Enum.IsDefined(typeof(UserStatus), user.Status) ? ((UserStatus)user.Status).ToString() : "Unknown"
+
             }).ToList();
 
             return Ok(new StatusResponse
@@ -196,7 +200,9 @@ namespace KuwagoAPI.Controllers.Credentials
                 Username = user.Username,
                 ProfilePicture = user.ProfilePicture,
                 Role = Enum.IsDefined(typeof(UserRole), user.Role) ? ((UserRole)user.Role).ToString() : "Unknown",
-                CreatedAt = user.createdAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+                CreatedAt = user.createdAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss"),
+                Status = Enum.IsDefined(typeof(UserStatus), user.Status) ? ((UserStatus)user.Status).ToString() : "Unknown"
+
             }).ToList();
 
             return Ok(new StatusResponse
@@ -248,10 +254,26 @@ namespace KuwagoAPI.Controllers.Credentials
             });
         }
 
+        [Authorize(Policy = "AdminLendersBorrowers")]
+        [Authorize]
+        [HttpPut("EditUserInfoRequest")]
+        public async Task<IActionResult> EditUserInfoRequest([FromBody] EditUserInfoRequest request)
+        {
+            var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
+            if (string.IsNullOrWhiteSpace(uid))
+            {
+                return Unauthorized(new StatusResponse
+                {
+                    Success = false,
+                    Message = "UID not found in token.",
+                    StatusCode = 401
+                });
+            }
 
-
-
+            var result = await _authService.EditUserInfoRequest(uid, request);
+            return StatusCode(result.StatusCode, result);
+        }
 
 
     }

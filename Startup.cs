@@ -31,6 +31,8 @@ namespace KuwagoAPI
                     Credential = GoogleCredential.FromFile(path)
                 });
             }
+            
+            services.AddSingleton(FirebaseAdmin.Auth.FirebaseAuth.GetAuth(FirebaseApp.DefaultInstance));
 
             // Register FirestoreDb and Auth instance
             services.AddSingleton(new FirebaseAuthProvider(new FirebaseConfig("AIzaSyDk9o89s1prZ4aQd1dzB0XiUQWCUGDD7n8")));
