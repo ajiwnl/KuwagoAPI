@@ -352,6 +352,89 @@ namespace KuwagoAPI.Services
             };
         }
 
+        public async Task<StatusResponse> ChangeUserEmailAsync(string uid, string newEmail, string currentUserToken)
+        {
+            try
+            {
+                // 1. Update email via Firebase Admin SDK
+                var userRecordArgs = new UserRecordArgs()
+                {
+                    Uid = uid,
+                    Email = newEmail,
+                    EmailVerified = false // Because email changed, mark as unverified
+                };
+
+                await _firebaseAdminAuth.UpdateUserAsync(userRecordArgs);
+
+                // 2. Send verification email using Firebase client SDK
+                //valid Firebase ID token (currentUserToken) from the client side
+                await _firebaseAuth.SendEmailVerificationAsync(currentUserToken);
+
+                // 3. Also update email in Firestore user document
+                var userDoc = _firestoreDb.Collection("Users").Document(uid);
+                await userDoc.UpdateAsync("Email", newEmail);
+
+                return new StatusResponse
+                {
+                    Success = true,
+                    Message = "Email changed successfully. Verification email sent to new address.",
+                    StatusCode = 200
+                };
+            }
+            catch (Firebase.Auth.FirebaseAuthException ex)
+            {
+                return new StatusResponse
+                {
+                    Success = false,
+                    Message = ex.Message,
+                    StatusCode = 500
+                };
+            }
+        }
+
+
+        public async Task<StatusResponse> ChangePasswordAsync(string uid, string newPassword)
+        {
+            if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 6)
+            {
+                return new StatusResponse
+                {
+                    Success = false,
+                    Message = "Password must be at least 6 characters long.",
+                    StatusCode = 400
+                };
+            }
+
+            try
+            {
+                // Update password in Firebase Auth
+                var userRecordArgs = new UserRecordArgs
+                {
+                    Uid = uid,
+                    Password = newPassword
+                };
+
+                var userRecord = await _firebaseAdminAuth.UpdateUserAsync(userRecordArgs);
+
+                return new StatusResponse
+                {
+                    Success = true,
+                    Message = "Password updated successfully.",
+                    StatusCode = 200
+                };
+            }
+            catch (FirebaseAdmin.Auth.FirebaseAuthException ex)
+            {
+                return new StatusResponse
+                {
+                    Success = false,
+                    Message = ex.Message,
+                    StatusCode = 500
+                };
+            }
+        }
+
+
 
 
 
