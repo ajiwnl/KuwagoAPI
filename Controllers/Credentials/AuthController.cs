@@ -275,6 +275,56 @@ namespace KuwagoAPI.Controllers.Credentials
             return StatusCode(result.StatusCode, result);
         }
 
+        [Authorize(Policy = "AdminLendersBorrowers")]
+       [HttpPut("ChangeEmail")]
+        public async Task<IActionResult> ChangeEmail([FromBody] ChangeEmailRequest request)
+        {
+            var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            if (string.IsNullOrWhiteSpace(uid))
+                return Unauthorized(new StatusResponse
+                {
+                    Success = false,
+                    Message = "UID not found in token.",
+                    StatusCode = 401
+                });
+
+            // Current Firebase ID token should be passed from client
+            var currentUserToken = Request.Headers["FirebaseIdToken"].FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(currentUserToken))
+                return BadRequest(new StatusResponse
+                {
+                    Success = false,
+                    Message = "Firebase ID token is required to send verification email.",
+                    StatusCode = 400
+                });
+
+            var result = await _authService.ChangeUserEmailAsync(uid, request.NewEmail, currentUserToken);
+            return StatusCode(result.StatusCode, result);
+        }
+
+
+        [Authorize(Policy = "AdminLendersBorrowers")]
+        [HttpPut("ChangePassword")]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(uid))
+                return Unauthorized(new StatusResponse
+                {
+                    Success = false,
+                    Message = "UID not found in token.",
+                    StatusCode = 401
+                });
+
+            var result = await _authService.ChangePasswordAsync(uid, request.NewPassword);
+            return StatusCode(result.StatusCode, result);
+        }
+
+
 
     }
 }
