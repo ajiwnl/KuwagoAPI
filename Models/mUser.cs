@@ -35,5 +35,8 @@ namespace KuwagoAPI.Models
         [FirestoreProperty]
         public int Role { get; set; }
 
+        [FirestoreProperty]
+        public int Status { get; set; }
+
     }
 }

@@ -9,6 +9,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Newtonsoft.Json.Linq;
+using KuwagoAPI.DTO;
 
 namespace KuwagoAPI.Services
 {
@@ -16,11 +17,14 @@ namespace KuwagoAPI.Services
     {
         private readonly FirebaseAuthProvider _firebaseAuth;
         private readonly FirestoreDb _firestoreDb;
+        private readonly FirebaseAdmin.Auth.FirebaseAuth _firebaseAdminAuth;
 
-        public AuthService(FirebaseAuthProvider firebaseAuth, FirestoreDb firestoreDb)
+        public AuthService(FirebaseAuthProvider firebaseAuth, FirestoreDb firestoreDb, FirebaseAdmin.Auth.FirebaseAuth firebaseAdminAuth)
         {
             _firebaseAuth = firebaseAuth;
             _firestoreDb = firestoreDb;
+            _firebaseAdminAuth = firebaseAdminAuth;
+            _firebaseAdminAuth = firebaseAdminAuth;
         }
 
         public string GenerateJwtToken(string uid, int role)
@@ -123,7 +127,8 @@ namespace KuwagoAPI.Services
                     ProfilePicture = "https://i.pinimg.com/474x/e6/e4/df/e6e4df26ba752161b9fc6a17321fa286.jpg",
                     Username = request.Username,
                     createdAt = Timestamp.FromDateTime(DateTime.UtcNow),
-                    Role = role
+                    Role = role,
+                    Status = (int)UserStatus.Active
                 };
 
                 await docRef.SetAsync(user);
@@ -284,6 +289,67 @@ namespace KuwagoAPI.Services
 
             var snapshotList = await query.GetSnapshotAsync();
             return snapshotList.Documents.Select(doc => doc.ConvertTo<mUser>()).ToList();
+        }
+
+        public async Task<StatusResponse> EditUserInfoRequest(string uid, EditUserInfoRequest request)
+        {
+            var userDoc = _firestoreDb.Collection("Users").Document(uid);
+            var snapshot = await userDoc.GetSnapshotAsync();
+
+            if (!snapshot.Exists)
+            {
+                return new StatusResponse
+                {
+                    Success = false,
+                    Message = "User not found.",
+                    StatusCode = 404
+                };
+            }
+
+            var updates = new Dictionary<string, object>();
+
+            if (!string.IsNullOrWhiteSpace(request.FirstName)) updates["FirstName"] = request.FirstName;
+            if (!string.IsNullOrWhiteSpace(request.LastName)) updates["LastName"] = request.LastName;
+            if (!string.IsNullOrWhiteSpace(request.PhoneNumber)) updates["PhoneNumber"] = request.PhoneNumber;
+            if (Enum.IsDefined(typeof(UserStatus), request.Status))
+            {
+                var currentStatus = snapshot.GetValue<int>("Status");
+                if (request.Status != currentStatus)
+                {
+                    updates["Status"] = request.Status;
+                }
+            }
+
+
+
+            if (updates.Count > 0)
+                await userDoc.UpdateAsync(updates);
+
+            // Fetch updated user data
+            var updatedSnapshot = await userDoc.GetSnapshotAsync();
+            var updatedUser = updatedSnapshot.ConvertTo<mUser>();
+
+            var userDto = new UserDto
+            {
+                UID = updatedUser.UID,
+                FullName = $"{updatedUser.FirstName} {updatedUser.LastName}",
+                Email = updatedUser.Email,
+                PhoneNumber = updatedUser.PhoneNumber,
+                Username = updatedUser.Username,
+                ProfilePicture = updatedUser.ProfilePicture,
+                Role = Enum.IsDefined(typeof(UserRole), updatedUser.Role) ? ((UserRole)updatedUser.Role).ToString() : "Unknown",
+                CreatedAt = updatedUser.createdAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss"),
+                Status = Enum.IsDefined(typeof(UserStatus), updatedUser.Status) ? ((UserStatus)updatedUser.Status).ToString() : "Unknown"
+
+            };
+
+            return new StatusResponse
+            {
+                Success = true,
+                Message = "Profile updated successfully.",
+                StatusCode = 200,
+                 Data = userDto
+            };
         }
 
 

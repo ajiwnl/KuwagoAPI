@@ -10,6 +10,7 @@
         public string ProfilePicture { get; set; }
         public string Role { get; set; }
         public string CreatedAt { get; set; }
+        public string Status { get; set; }
     }
 
 }
