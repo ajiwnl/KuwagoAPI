@@ -56,7 +56,9 @@ namespace KuwagoAPI.Controllers.Credentials
             if (user == null)
                 return Unauthorized("User not found");
 
-            var token = _authService.GenerateJwtToken(uid, user.Role);
+            string firebaseToken = ((dynamic)result.Data)?.FirebaseToken;
+            var token = _authService.GenerateJwtToken(uid, user.Role, firebaseToken);
+
 
             return Ok(new StatusResponse
             {

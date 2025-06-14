@@ -47,6 +47,7 @@ namespace KuwagoAPI
             services.AddDistributedMemoryCache();
             services.AddScoped<CloudinaryService>();
             services.AddHttpClient<FaceVerificationService>();
+            services.AddHttpClient<DocumentService>();
             services.AddSession(options =>
             {
                 options.IdleTimeout = TimeSpan.FromMinutes(30);
