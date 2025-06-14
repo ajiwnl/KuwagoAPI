@@ -27,18 +27,21 @@ namespace KuwagoAPI.Services
             _firebaseAdminAuth = firebaseAdminAuth;
         }
 
-        public string GenerateJwtToken(string uid, int role)
+        public string GenerateJwtToken(string uid, int role, string firebaseToken)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.UTF8.GetBytes("a-string-secret-at-least-256-bits-long");
 
+            var claims = new List<Claim>
+    {
+        new Claim(ClaimTypes.NameIdentifier, uid),
+        new Claim(ClaimTypes.Role, role.ToString()),
+        new Claim("firebase_token", firebaseToken)
+    };
+
             var tokenDescriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity(new[]
-                {
-            new Claim(ClaimTypes.NameIdentifier, uid),
-            new Claim(ClaimTypes.Role, role.ToString())
-        }),
+                Subject = new ClaimsIdentity(claims),
                 Expires = DateTime.UtcNow.AddMinutes(60),
                 Issuer = "KuwagoAPI",
                 Audience = "KuwagoClient",
@@ -48,7 +51,6 @@ namespace KuwagoAPI.Services
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
         }
-
 
 
         public async Task<StatusResponse> RegisterUserAsync(RegisterRequest request)
@@ -195,7 +197,11 @@ namespace KuwagoAPI.Services
                     Success = true,
                     Message = user.LocalId,
                     StatusCode = 200,
-                    Data = new { UID = user.LocalId }
+                    Data = new
+                    {
+                        UID = user.LocalId,
+                        FirebaseToken = auth.FirebaseToken
+                    }
                 };
             }
             catch (Firebase.Auth.FirebaseAuthException ex)
