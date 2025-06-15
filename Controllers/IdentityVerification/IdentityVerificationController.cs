@@ -47,6 +47,18 @@ namespace KuwagoAPI.Controllers.IdentityVerification
                 });
             }
 
+            // Accept only image/jpeg and image/png
+            var allowedContentTypes = new[] { "image/jpeg", "image/png" };
+            if (!allowedContentTypes.Contains(idPhoto.ContentType) || !allowedContentTypes.Contains(selfiePhoto.ContentType))
+            {
+                return BadRequest(new StatusResponse
+                {
+                    Success = false,
+                    Message = "Only JPEG and PNG image formats are allowed.",
+                    StatusCode = 400
+                });
+            }
+
             var uid = GetUserIdFromToken();
             var user = await _authService.GetUserByUIDAsync(uid);
             if (user == null)
