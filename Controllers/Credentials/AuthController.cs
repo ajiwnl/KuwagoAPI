@@ -283,30 +283,57 @@ namespace KuwagoAPI.Controllers.Credentials
         }
 
         [Authorize(Policy = "AdminLendersBorrowers")]
-       [HttpPut("ChangeEmail")]
+        [HttpPut("ChangeEmail")]
         public async Task<IActionResult> ChangeEmail([FromBody] ChangeEmailRequest request)
         {
-            var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new StatusResponse
+                {
+                    Success = false,
+                    Message = "Invalid request model",
+                    StatusCode = 400,
+                    Data = ModelState.Values
+                        .SelectMany(v => v.Errors)
+                        .Select(e => e.ErrorMessage)
+                });
+            }
 
+            var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrWhiteSpace(uid))
+            {
                 return Unauthorized(new StatusResponse
                 {
                     Success = false,
                     Message = "UID not found in token.",
                     StatusCode = 401
                 });
+            }
 
-            // Current Firebase ID token should be passed from client
-            var currentUserToken = Request.Headers["FirebaseIdToken"].FirstOrDefault();
-            if (string.IsNullOrWhiteSpace(currentUserToken))
+            // Validate email format
+            var emailValidator = new System.ComponentModel.DataAnnotations.EmailAddressAttribute();
+            if (!emailValidator.IsValid(request.NewEmail))
+            {
                 return BadRequest(new StatusResponse
                 {
                     Success = false,
-                    Message = "Firebase ID token is required to send verification email.",
+                    Message = "Invalid email format.",
                     StatusCode = 400
                 });
+            }
 
-            var result = await _authService.ChangeUserEmailAsync(uid, request.NewEmail, currentUserToken);
+            // Get the firebase token from the request body
+            if (string.IsNullOrWhiteSpace(request.FirebaseToken))
+            {
+                return BadRequest(new StatusResponse
+                {
+                    Success = false,
+                    Message = "Firebase ID token is required in the request body.",
+                    StatusCode = 400
+                });
+            }
+
+            var result = await _authService.ChangeUserEmailAsync(uid, request.NewEmail, request.FirebaseToken);
             return StatusCode(result.StatusCode, result);
         }
 
@@ -390,9 +417,6 @@ namespace KuwagoAPI.Controllers.Credentials
                 Data = new { profilePicUrl }
             });
         }
-
-
-
 
     }
 }
