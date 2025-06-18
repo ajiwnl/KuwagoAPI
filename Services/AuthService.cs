@@ -428,16 +428,36 @@ namespace KuwagoAPI.Services
                     var userDoc = _firestoreDb.Collection("Users").Document(uid);
                     await userDoc.UpdateAsync("Email", newEmail);
 
-                    // 3. Email change is complete - let client handle verification
-                    return new StatusResponse
+                    // 3. Send verification email using Firebase Admin SDK
+                    try
                     {
-                        Success = true,
-                        Message = "Email changed successfully. Please log in again with your new email to verify it.",
-                        StatusCode = 200,
-                        Data = new { 
-                            message = "After logging in with your new email, you can request email verification from your client app"
-                        }
-                    };
+                        // Generate verification link for the new email (without custom domain)
+                        var verificationLink = await _firebaseAdminAuth.GenerateEmailVerificationLinkAsync(newEmail);
+                        
+                        // For now, return the verification link in the response
+                        // The user can click this link to verify their email
+                        return new StatusResponse
+                        {
+                            Success = true,
+                            Message = "Email changed successfully. Please use the verification link below to verify your email.",
+                            StatusCode = 200,
+                            Data = new { 
+                                verificationLink = verificationLink,
+                                message = "Click the verification link to verify your new email address"
+                            }
+                        };
+                    }
+                    catch (FirebaseAdmin.Auth.FirebaseAuthException ex)
+                    {
+                        // If verification link generation fails, we still return success but with a note
+                        return new StatusResponse
+                        {
+                            Success = true,
+                            Message = "Email changed successfully, but verification link could not be generated. Please contact support.",
+                            StatusCode = 200,
+                            Data = new { error = ex.Message }
+                        };
+                    }
                 }
                 catch (FirebaseAdmin.Auth.FirebaseAuthException ex)
                 {
