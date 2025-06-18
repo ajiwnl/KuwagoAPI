@@ -18,14 +18,12 @@ namespace KuwagoAPI.Services
         private readonly FirebaseAuthProvider _firebaseAuth;
         private readonly FirestoreDb _firestoreDb;
         private readonly FirebaseAdmin.Auth.FirebaseAuth _firebaseAdminAuth;
-        private readonly EmailService _emailService;
 
-        public AuthService(FirebaseAuthProvider firebaseAuth, FirestoreDb firestoreDb, FirebaseAdmin.Auth.FirebaseAuth firebaseAdminAuth, EmailService emailService)
+        public AuthService(FirebaseAuthProvider firebaseAuth, FirestoreDb firestoreDb, FirebaseAdmin.Auth.FirebaseAuth firebaseAdminAuth)
         {
             _firebaseAuth = firebaseAuth;
             _firestoreDb = firestoreDb;
             _firebaseAdminAuth = firebaseAdminAuth;
-            _emailService = emailService;
         }
 
         public string GenerateJwtToken(string uid, int role, string firebaseToken)
@@ -430,41 +428,16 @@ namespace KuwagoAPI.Services
                     var userDoc = _firestoreDb.Collection("Users").Document(uid);
                     await userDoc.UpdateAsync("Email", newEmail);
 
-                    // 3. Send verification email using Firebase Admin SDK
-                    try
+                    // 3. Email change is complete - let client handle verification
+                    return new StatusResponse
                     {
-                        var actionCodeSettings = new ActionCodeSettings()
-                        {
-                            Url = "https://your-app-domain.com/verify-email", // Replace with your app's verification URL
-                            HandleCodeInApp = true
-                        };
-
-                        var verificationLink = await _firebaseAdminAuth.GenerateEmailVerificationLinkAsync(newEmail, actionCodeSettings);
-                        
-                        // TODO: Send this verification link via your email service
-                        // For now, we'll include it in the response for testing
-                        return new StatusResponse
-                        {
-                            Success = true,
-                            Message = "Email changed successfully. Please check your new email address for verification.",
-                            StatusCode = 200,
-                            Data = new { 
-                                verificationLink = verificationLink,
-                                message = "Please use this link to verify your email (for testing purposes)"
-                            }
-                        };
-                    }
-                    catch (FirebaseAdmin.Auth.FirebaseAuthException ex)
-                    {
-                        // If verification email fails, we still return success but with a note
-                        return new StatusResponse
-                        {
-                            Success = true,
-                            Message = "Email changed successfully, but verification email could not be sent. Please contact support.",
-                            StatusCode = 200,
-                            Data = new { error = ex.Message }
-                        };
-                    }
+                        Success = true,
+                        Message = "Email changed successfully. Please log in again with your new email to verify it.",
+                        StatusCode = 200,
+                        Data = new { 
+                            message = "After logging in with your new email, you can request email verification from your client app"
+                        }
+                    };
                 }
                 catch (FirebaseAdmin.Auth.FirebaseAuthException ex)
                 {
@@ -566,24 +539,16 @@ namespace KuwagoAPI.Services
                     };
                 }
 
-                // Generate email verification link
-                var actionCodeSettings = new ActionCodeSettings()
-                {
-                    Url = "https://your-app-domain.com/verify-email", // Replace with your app's verification URL
-                    HandleCodeInApp = true
-                };
-
-                var link = await _firebaseAdminAuth.GenerateEmailVerificationLinkAsync(userRecord.Email, actionCodeSettings);
-
-                // In a real application, you might want to send this link via your own email service
-                // For now, we'll just return success
-                
+                // Note: This method requires a Firebase ID token from the client
+                // The client should call this endpoint with a valid Firebase token
                 return new StatusResponse
                 {
-                    Success = true,
-                    Message = "Email verification link generated successfully.",
-                    StatusCode = 200,
-                    Data = new { verificationLink = link }
+                    Success = false,
+                    Message = "Please use the client SDK to send email verification.",
+                    StatusCode = 400,
+                    Data = new { 
+                        message = "Use firebase.auth().currentUser.sendEmailVerification() in your client app"
+                    }
                 };
             }
             catch (FirebaseAdmin.Auth.FirebaseAuthException ex)

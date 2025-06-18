@@ -418,24 +418,5 @@ namespace KuwagoAPI.Controllers.Credentials
             });
         }
 
-        [Authorize(Policy = "AdminLendersBorrowers")]
-        [HttpPost("SendEmailVerification")]
-        public async Task<IActionResult> SendEmailVerification()
-        {
-            var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrWhiteSpace(uid))
-            {
-                return Unauthorized(new StatusResponse
-                {
-                    Success = false,
-                    Message = "UID not found in token.",
-                    StatusCode = 401
-                });
-            }
-
-            var result = await _authService.SendEmailVerificationAsync(uid);
-            return StatusCode(result.StatusCode, result);
-        }
-
     }
 }
