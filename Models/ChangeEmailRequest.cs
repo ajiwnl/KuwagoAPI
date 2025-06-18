@@ -7,5 +7,8 @@ namespace KuwagoAPI.Models
         [Required]
         [EmailAddress]
         public string NewEmail { get; set; } = null!;
+
+        [Required]
+        public string FirebaseToken { get; set; } = null!;
     }
 }

@@ -24,7 +24,6 @@ namespace KuwagoAPI.Services
             _firebaseAuth = firebaseAuth;
             _firestoreDb = firestoreDb;
             _firebaseAdminAuth = firebaseAdminAuth;
-            _firebaseAdminAuth = firebaseAdminAuth;
         }
 
         public string GenerateJwtToken(string uid, int role, string firebaseToken)
@@ -362,37 +361,140 @@ namespace KuwagoAPI.Services
         {
             try
             {
-                // 1. Update email via Firebase Admin SDK
-                var userRecordArgs = new UserRecordArgs()
+                // First validate the Firebase token
+                try
                 {
-                    Uid = uid,
-                    Email = newEmail,
-                    EmailVerified = false // Because email changed, mark as unverified
-                };
-
-                await _firebaseAdminAuth.UpdateUserAsync(userRecordArgs);
-
-                // 2. Send verification email using Firebase client SDK
-                //valid Firebase ID token (currentUserToken) from the client side
-                await _firebaseAuth.SendEmailVerificationAsync(currentUserToken);
-
-                // 3. Also update email in Firestore user document
-                var userDoc = _firestoreDb.Collection("Users").Document(uid);
-                await userDoc.UpdateAsync("Email", newEmail);
-
-                return new StatusResponse
+                    var decodedToken = await _firebaseAdminAuth.VerifyIdTokenAsync(currentUserToken);
+                    if (decodedToken.Uid != uid)
+                    {
+                        return new StatusResponse
+                        {
+                            Success = false,
+                            Message = "Invalid Firebase token for this user.",
+                            StatusCode = 401
+                        };
+                    }
+                }
+                catch (FirebaseAdmin.Auth.FirebaseAuthException)
                 {
-                    Success = true,
-                    Message = "Email changed successfully. Verification email sent to new address.",
-                    StatusCode = 200
-                };
+                    return new StatusResponse
+                    {
+                        Success = false,
+                        Message = "Invalid or expired Firebase token.",
+                        StatusCode = 401
+                    };
+                }
+
+                // Get current user data to check if email is actually changing
+                var currentUser = await _firebaseAdminAuth.GetUserAsync(uid);
+                if (currentUser.Email?.ToLower() == newEmail.ToLower())
+                {
+                    return new StatusResponse
+                    {
+                        Success = false,
+                        Message = "New email is the same as current email.",
+                        StatusCode = 400
+                    };
+                }
+
+                // Check if the new email already exists in Firestore
+                var checkEmail = await _firestoreDb.Collection("Users")
+                    .WhereEqualTo("Email", newEmail)
+                    .GetSnapshotAsync();
+
+                if (checkEmail.Documents.Count > 0)
+                {
+                    return new StatusResponse
+                    {
+                        Success = false,
+                        Message = "Email already registered with another account.",
+                        StatusCode = 409 // Conflict
+                    };
+                }
+
+                try
+                {
+                    // 1. First update the email in Firebase Auth
+                    var userRecordArgs = new UserRecordArgs()
+                    {
+                        Uid = uid,
+                        Email = newEmail,
+                        EmailVerified = false // Because email changed, mark as unverified
+                    };
+
+                    await _firebaseAdminAuth.UpdateUserAsync(userRecordArgs);
+
+                    // 2. Update email in Firestore
+                    var userDoc = _firestoreDb.Collection("Users").Document(uid);
+                    await userDoc.UpdateAsync("Email", newEmail);
+
+                    // 3. Send verification email using Firebase Admin SDK
+                    try
+                    {
+                        // Generate verification link for the new email (without custom domain)
+                        var verificationLink = await _firebaseAdminAuth.GenerateEmailVerificationLinkAsync(newEmail);
+                        
+                        // For now, return the verification link in the response
+                        // The user can click this link to verify their email
+                        return new StatusResponse
+                        {
+                            Success = true,
+                            Message = "Email changed successfully. Please use the verification link below to verify your email.",
+                            StatusCode = 200,
+                            Data = new { 
+                                verificationLink = verificationLink,
+                                message = "Click the verification link to verify your new email address"
+                            }
+                        };
+                    }
+                    catch (FirebaseAdmin.Auth.FirebaseAuthException ex)
+                    {
+                        // If verification link generation fails, we still return success but with a note
+                        return new StatusResponse
+                        {
+                            Success = true,
+                            Message = "Email changed successfully, but verification link could not be generated. Please contact support.",
+                            StatusCode = 200,
+                            Data = new { error = ex.Message }
+                        };
+                    }
+                }
+                catch (FirebaseAdmin.Auth.FirebaseAuthException ex)
+                {
+                    // Handle specific Firebase Admin Auth exceptions
+                    string errorMessage = ex.Message;
+                    int statusCode = 400;
+
+                    if (ex.Message.Contains("EMAIL_EXISTS") || ex.Message.Contains("already in use"))
+                    {
+                        errorMessage = "Email already registered with another account.";
+                        statusCode = 409;
+                    }
+                    else if (ex.Message.Contains("INVALID_EMAIL"))
+                    {
+                        errorMessage = "Invalid email format.";
+                        statusCode = 400;
+                    }
+                    else if (ex.Message.Contains("USER_NOT_FOUND"))
+                    {
+                        errorMessage = "User not found.";
+                        statusCode = 404;
+                    }
+
+                    return new StatusResponse
+                    {
+                        Success = false,
+                        Message = errorMessage,
+                        StatusCode = statusCode
+                    };
+                }
             }
-            catch (Firebase.Auth.FirebaseAuthException ex)
+            catch (Exception ex)
             {
                 return new StatusResponse
                 {
                     Success = false,
-                    Message = ex.Message,
+                    Message = $"An error occurred: {ex.Message}",
                     StatusCode = 500
                 };
             }
@@ -435,6 +537,55 @@ namespace KuwagoAPI.Services
                 {
                     Success = false,
                     Message = ex.Message,
+                    StatusCode = 500
+                };
+            }
+        }
+
+        public async Task<StatusResponse> SendEmailVerificationAsync(string uid)
+        {
+            try
+            {
+                // Get user record to check if email is verified
+                var userRecord = await _firebaseAdminAuth.GetUserAsync(uid);
+                
+                if (userRecord.EmailVerified)
+                {
+                    return new StatusResponse
+                    {
+                        Success = false,
+                        Message = "Email is already verified.",
+                        StatusCode = 400
+                    };
+                }
+
+                // Note: This method requires a Firebase ID token from the client
+                // The client should call this endpoint with a valid Firebase token
+                return new StatusResponse
+                {
+                    Success = false,
+                    Message = "Please use the client SDK to send email verification.",
+                    StatusCode = 400,
+                    Data = new { 
+                        message = "Use firebase.auth().currentUser.sendEmailVerification() in your client app"
+                    }
+                };
+            }
+            catch (FirebaseAdmin.Auth.FirebaseAuthException ex)
+            {
+                return new StatusResponse
+                {
+                    Success = false,
+                    Message = ex.Message,
+                    StatusCode = 400
+                };
+            }
+            catch (Exception ex)
+            {
+                return new StatusResponse
+                {
+                    Success = false,
+                    Message = $"An error occurred: {ex.Message}",
                     StatusCode = 500
                 };
             }
