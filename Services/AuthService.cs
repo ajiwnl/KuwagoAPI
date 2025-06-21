@@ -18,7 +18,7 @@ namespace KuwagoAPI.Services
         private readonly FirebaseAuthProvider _firebaseAuth;
         private readonly FirestoreDb _firestoreDb;
         private readonly FirebaseAdmin.Auth.FirebaseAuth _firebaseAdminAuth;
-
+           
         public AuthService(FirebaseAuthProvider firebaseAuth, FirestoreDb firestoreDb, FirebaseAdmin.Auth.FirebaseAuth firebaseAdminAuth)
         {
             _firebaseAuth = firebaseAuth;
@@ -109,15 +109,12 @@ namespace KuwagoAPI.Services
                 };
             }
 
-
             try
             {
                 var auth = await _firebaseAuth.CreateUserWithEmailAndPasswordAsync(request.Email, request.Password);
-                await _firebaseAuth.SendEmailVerificationAsync(auth.FirebaseToken);
-
                 var uid = auth.User.LocalId;
-                var docRef = _firestoreDb.Collection("Users").Document(uid);
 
+                // Save user to Firestore
                 var user = new mUser
                 {
                     UID = uid,
@@ -128,17 +125,26 @@ namespace KuwagoAPI.Services
                     ProfilePicture = "https://i.pinimg.com/474x/e6/e4/df/e6e4df26ba752161b9fc6a17321fa286.jpg",
                     Username = request.Username,
                     createdAt = Timestamp.FromDateTime(DateTime.UtcNow),
-                    Role = role,
+                    Role = request.Role ?? (int)UserRole.Borrower,
                     Status = (int)UserStatus.Active
                 };
 
+                var docRef = _firestoreDb.Collection("Users").Document(uid);
                 await docRef.SetAsync(user);
 
+                // ✅ Use Admin SDK to generate verification email link
+                var verificationLink = await _firebaseAdminAuth.GenerateEmailVerificationLinkAsync(request.Email);
+
                 return new StatusResponse
-                { 
+                {
                     Success = true,
-                    Message = "Registration successful! Please verify your email.",
-                    StatusCode = 201
+                    Message = "Registration successful. Please verify your email.",
+                    StatusCode = 201,
+                    Data = new
+                    {
+                        UID = uid,
+                        VerificationLink = verificationLink
+                    }
                 };
             }
             catch (Firebase.Auth.FirebaseAuthException ex)
