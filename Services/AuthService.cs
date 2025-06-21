@@ -132,7 +132,6 @@ namespace KuwagoAPI.Services
                 var docRef = _firestoreDb.Collection("Users").Document(uid);
                 await docRef.SetAsync(user);
 
-                // ✅ Use Admin SDK to generate verification email link
                 var verificationLink = await _firebaseAdminAuth.GenerateEmailVerificationLinkAsync(request.Email);
 
                 return new StatusResponse
@@ -142,9 +141,20 @@ namespace KuwagoAPI.Services
                     StatusCode = 201,
                     Data = new
                     {
-                        UID = uid,
+                        User = new
+                        {
+                            user.UID,
+                            user.Email,
+                            user.FirstName,
+                            user.LastName,
+                            user.Username,
+                            user.Role,
+                            user.Status,
+                            user.createdAt
+                        },
                         VerificationLink = verificationLink
                     }
+
                 };
             }
             catch (Firebase.Auth.FirebaseAuthException ex)
