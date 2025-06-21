@@ -150,7 +150,7 @@ namespace KuwagoAPI.Services
                             user.Username,
                             user.Role,
                             user.Status,
-                            user.createdAt
+                            CreatedAt = user.createdAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
                         },
                         VerificationLink = verificationLink
                     }
@@ -248,12 +248,17 @@ namespace KuwagoAPI.Services
 
             try
             {
-                await _firebaseAuth.SendPasswordResetEmailAsync(email);
+                var link = await _firebaseAdminAuth.GeneratePasswordResetLinkAsync(email);
+
                 return new StatusResponse
                 {
                     Success = true,
                     Message = "Password reset email sent. Please check your inbox.",
-                    StatusCode = 200
+                    StatusCode = 200,
+                    Data = new
+                    {
+                        VerificationLink = link
+                    }
                 };
             }
             catch (Firebase.Auth.FirebaseAuthException ex)
@@ -340,8 +345,6 @@ namespace KuwagoAPI.Services
                     updates["Status"] = request.Status;
                 }
             }
-
-
 
             if (updates.Count > 0)
                 await userDoc.UpdateAsync(updates);
@@ -515,7 +518,6 @@ namespace KuwagoAPI.Services
                 };
             }
         }
-
 
         public async Task<StatusResponse> ChangePasswordAsync(string uid, string newPassword)
         {

@@ -71,7 +71,7 @@ namespace KuwagoAPI.Controllers.Credentials
 
 
 
-        [Authorize]
+        [Authorize(Policy = "AdminLendersBorrowers")]
         [HttpPost("logout")]
         public IActionResult Logout()
         {
@@ -104,7 +104,8 @@ namespace KuwagoAPI.Controllers.Credentials
             {
                 Success = true,
                 Message = result.Message,
-                StatusCode = 200
+                StatusCode = 200,
+                Data = result.Data
             });
         }
 
