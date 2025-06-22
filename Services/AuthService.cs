@@ -479,29 +479,57 @@ namespace KuwagoAPI.Services
                     {
                         // Generate verification link for the new email (without custom domain)
                         var verificationLink = await _firebaseAdminAuth.GenerateEmailVerificationLinkAsync(newEmail);
-                        
-                        // For now, return the verification link in the response
-                        // The user can click this link to verify their email
+
+                        // Fetch updated user data
+                        var updatedSnapshot = await userDoc.GetSnapshotAsync();
+                        var updatedUser = updatedSnapshot.ConvertTo<mUser>();
+
+                        var userObj = new
+                        {
+                            uid = updatedUser.UID,
+                            email = newEmail, // Use the new email
+                            firstName = updatedUser.FirstName,
+                            lastName = updatedUser.LastName,
+                            username = updatedUser.Username,
+                            role = updatedUser.Role,
+                            status = updatedUser.Status,
+                            createdAt = updatedUser.createdAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+                        };
+
                         return new StatusResponse
                         {
                             Success = true,
                             Message = "Email changed successfully. Please use the verification link below to verify your email.",
                             StatusCode = 200,
-                            Data = new { 
-                                verificationLink = verificationLink,
-                                message = "Click the verification link to verify your new email address"
+                            Data = new {
+                                User = userObj,
+                                VerificationLink = verificationLink
+                                
                             }
                         };
                     }
                     catch (FirebaseAdmin.Auth.FirebaseAuthException ex)
                     {
                         // If verification link generation fails, we still return success but with a note
+                        var updatedSnapshot = await userDoc.GetSnapshotAsync();
+                        var updatedUser = updatedSnapshot.ConvertTo<mUser>();
+
+                        var userObj = new
+                        {
+                            uid = updatedUser.UID,
+                            email = newEmail, // Use the new email
+                            firstName = updatedUser.FirstName,
+                            lastName = updatedUser.LastName,
+                            username = updatedUser.Username,
+                            createdAt = updatedUser.createdAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+                        };
+
                         return new StatusResponse
                         {
                             Success = true,
                             Message = "Email changed successfully, but verification link could not be generated. Please contact support.",
                             StatusCode = 200,
-                            Data = new { error = ex.Message }
+                            Data = new { User = userObj, Error = ex.Message }
                         };
                     }
                 }
