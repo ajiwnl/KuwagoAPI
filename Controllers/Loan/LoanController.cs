@@ -64,6 +64,17 @@ namespace KuwagoAPI.Controllers.Loan
             return StatusCode(result.StatusCode, result);
         }
 
+        [Authorize(Policy = "LenderOnly")]
+        [HttpPut("LoanAgreement")]
+        public async Task<IActionResult> ApproveOrDenyLoan([FromBody] LoanAgreementDTO dto)
+        {
+            var adminUid = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(adminUid))
+                return Unauthorized(new StatusResponse { Success = false, Message = "Admin UID not found.", StatusCode = 401 });
+
+            var result = await _loanService.ProcessLoanAgreementAsync(dto, adminUid);
+            return StatusCode(result.StatusCode, result);
+        }
 
     }
 
