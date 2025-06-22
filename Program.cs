@@ -120,11 +120,11 @@ builder.Services.AddAuthorization(options =>
        var roleClaim = context.User.FindFirst(ClaimTypes.Role)?.Value;
        return roleClaim == "1";
    }));
-    options.AddPolicy("LenderOnly", policy =>
+    options.AddPolicy("AdminLender", policy =>
   policy.RequireAssertion(context =>
   {
       var roleClaim = context.User.FindFirst(ClaimTypes.Role)?.Value;
-      return roleClaim == "0";
+      return roleClaim == "0" || roleClaim == "1";
   }));
 });
 

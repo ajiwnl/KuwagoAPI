@@ -30,6 +30,41 @@ namespace KuwagoAPI.Controllers.Loan
             var response = await _loanService.CreateLoanRequestAsync(uid, dto);
             return StatusCode(response.StatusCode, response);
         }
+
+        [Authorize(Policy = "BorrowerOnly")]
+        [HttpGet("LoanRequests/{uid}")]
+        public async Task<IActionResult> GetLoanRequests(string uid)
+        {
+            var result = await _loanService.GetLoanRequestsByUIDAsync(uid);
+            return StatusCode(result.StatusCode, result);
+        }
+
+        [Authorize(Policy = "BorrowerOnly")]
+        [HttpPost("FilterLoans/{uid}")]
+        public async Task<IActionResult> FilterLoans(string uid, [FromBody] LoanFilterDTO filter)
+        {
+            var result = await _loanService.FilterLoanRequestsAsync(uid, filter);
+
+            return StatusCode(result.StatusCode, result);
+        }
+
+        [Authorize(Policy = "AdminLender")]
+        [HttpGet("AllLoans")]
+        public async Task<IActionResult> GetAllLoans()
+        {
+            var result = await _loanService.GetAllLoanRequestsAsync();
+            return StatusCode(result.StatusCode, result);
+        }
+
+        [HttpPost("FilterLoans")]
+        [Authorize(Policy = "AdminLender")]
+        public async Task<IActionResult> FilterLoans([FromBody] LoanFilterDTOv2 filter)
+        {
+            var result = await _loanService.FilterLoanRequestsAsync(filter);
+            return StatusCode(result.StatusCode, result);
+        }
+
+
     }
 
 }
