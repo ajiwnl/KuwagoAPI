@@ -64,6 +64,7 @@ namespace KuwagoAPI.Services
                 };
 
                 var docRef = _firestoreDb.Collection("LoanRequests").Document();
+                loan.LoanRequestID = docRef.Id; 
                 await docRef.SetAsync(loan);
 
                 return new StatusResponse
@@ -84,6 +85,7 @@ namespace KuwagoAPI.Services
                         },
                         LoanInfo = new
                         {
+                            loan.LoanRequestID,
                             loan.UID,
                             loan.MaritalStatus,
                             loan.HighestEducation,
@@ -138,6 +140,7 @@ namespace KuwagoAPI.Services
                     var loan = doc.ConvertTo<mLoans>();
                     return new
                     {
+                        loan.LoanRequestID,
                         loan.UID,
                         loan.MaritalStatus,
                         loan.HighestEducation,
@@ -215,6 +218,7 @@ namespace KuwagoAPI.Services
                     var loan = doc.ConvertTo<mLoans>();
                     return new
                     {
+                        loan.LoanRequestID,
                         loan.UID,
                         loan.MaritalStatus,
                         loan.HighestEducation,
@@ -291,6 +295,7 @@ namespace KuwagoAPI.Services
                     {
                         LoanInfo = new
                         {
+                            loan.LoanRequestID,
                             loan.UID,
                             loan.MaritalStatus,
                             loan.HighestEducation,
@@ -382,6 +387,7 @@ namespace KuwagoAPI.Services
                     {
                         LoanInfo = new
                         {
+                            loan.LoanRequestID,
                             loan.UID,
                             loan.MaritalStatus,
                             loan.HighestEducation,
@@ -425,7 +431,132 @@ namespace KuwagoAPI.Services
             }
         }
 
+        public async Task<StatusResponse> ProcessLoanAgreementAsync(LoanAgreementDTO dto, string lenderUid)
+        {
+            try
+            {
+                // Validations
+                if (string.IsNullOrWhiteSpace(dto.LoanRequestID))
+                    return new StatusResponse { Success = false, Message = "LoanRequestID is required.", StatusCode = 400 };
 
+                if (string.IsNullOrWhiteSpace(dto.UpdatedLoanStatus))
+                    return new StatusResponse { Success = false, Message = "UpdatedLoanStatus is required.", StatusCode = 400 };
+
+                if (!Enum.TryParse<LoanStatus>(dto.UpdatedLoanStatus, true, out var parsedStatus))
+                    return new StatusResponse
+                    {
+                        Success = false,
+                        Message = "Invalid loan status provided. Allowed values: Pending, Active, Denied, InProgress, Completed.",
+                        StatusCode = 400
+                    };
+
+                if (dto.UpdatedLoanAmount < 0)
+                    return new StatusResponse { Success = false, Message = "Loan amount cannot be negative.", StatusCode = 400 };
+
+                if (string.IsNullOrWhiteSpace(lenderUid))
+                    return new StatusResponse { Success = false, Message = "Admin UID is missing or invalid.", StatusCode = 401 };
+
+                // Retrieve loan document
+                var loanDocRef = _firestoreDb.Collection("LoanRequests").Document(dto.LoanRequestID);
+                var loanSnapshot = await loanDocRef.GetSnapshotAsync();
+
+                if (!loanSnapshot.Exists)
+                    return new StatusResponse { Success = false, Message = "Loan request not found.", StatusCode = 404 };
+
+                var loan = loanSnapshot.ConvertTo<mLoans>();
+
+                // Retrieve borrower info
+                var userSnapshot = await _firestoreDb.Collection("Users").Document(loan.UID).GetSnapshotAsync();
+                if (!userSnapshot.Exists)
+                    return new StatusResponse { Success = false, Message = "Loan requester user not found.", StatusCode = 404 };
+
+                var user = userSnapshot.ConvertTo<mUser>();
+
+                // Retrieve admin info
+                var lenderSnapshot = await _firestoreDb.Collection("Users").Document(lenderUid).GetSnapshotAsync();
+                var lenderUser = lenderSnapshot.Exists ? lenderSnapshot.ConvertTo<mUser>() : null;
+
+                // Prevent downgrading
+                if (Enum.TryParse(loan.LoanStatus, out LoanStatus currentStatus) &&
+                    currentStatus == LoanStatus.Approved &&
+                    parsedStatus == LoanStatus.Pending)
+                {
+                    return new StatusResponse
+                    {
+                        Success = false,
+                        Message = "Cannot downgrade status from Active to Pending.",
+                        StatusCode = 400
+                    };
+                }
+
+                // Update loan in Firestore
+                Dictionary<string, object> updates = new()
+        {
+            { "LoanStatus", parsedStatus.ToString() },
+            { "LoanAmount", dto.UpdatedLoanAmount },
+            { "AgreementDate", Timestamp.FromDateTime(DateTime.UtcNow) }
+        };
+                await loanDocRef.UpdateAsync(updates);
+
+                // Update loan object for response
+                loan.LoanStatus = parsedStatus.ToString();
+                loan.LoanAmount = dto.UpdatedLoanAmount;
+
+                return new StatusResponse
+                {
+                    Success = true,
+                    Message = "Loan agreement processed successfully.",
+                    StatusCode = 200,
+                    Data = new
+                    {
+                        lenderUID = lenderUid,
+                        lenderInfo = lenderUser == null ? null : new
+                        {
+                            lenderUser.UID,
+                            lenderUser.FirstName,
+                            lenderUser.LastName,
+                            lenderUser.Email,
+                            lenderUser.Username,
+                            lenderUser.PhoneNumber
+                        },
+                        BorrowerInfo = new
+                        {
+                            user.UID,
+                            user.FirstName,
+                            user.LastName,
+                            user.Email,
+                            user.Username,
+                            user.PhoneNumber
+                        },
+                        UpdatedLoanInfo = new
+                        {
+                            loan.LoanRequestID,
+                            loan.UID,
+                            loan.MaritalStatus,
+                            loan.HighestEducation,
+                            loan.EmploymentInformation,
+                            loan.DetailedAddress,
+                            loan.ResidentType,
+                            loan.LoanType,
+                            loan.LoanAmount,
+                            loan.LoanPurpose,
+                            loan.LoanStatus,
+                            CreatedAt = loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss"),
+                            AgreementDate = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")
+                        }
+                    }
+                };
+            }
+            catch (Exception ex)
+            {
+                return new StatusResponse
+                {
+                    Success = false,
+                    Message = $"An error occurred: {ex.Message}",
+                    StatusCode = 500
+                };
+            }
+        }
 
 
     }

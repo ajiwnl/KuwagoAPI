@@ -50,7 +50,7 @@
         public enum LoanStatus
         {
             Pending = 0,
-            Active = 1,
+            Approved = 1,
             InProgress = 2,
             Denied = 3,
             Completed = 4

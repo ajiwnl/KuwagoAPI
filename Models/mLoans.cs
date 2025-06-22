@@ -7,6 +7,9 @@ namespace KuwagoAPI.Models
     public class mLoans
     {
         [FirestoreProperty]
+        public string LoanRequestID { get; set; }
+
+        [FirestoreProperty]
         public string UID { get; set; }
 
         [FirestoreProperty]
@@ -38,6 +41,10 @@ namespace KuwagoAPI.Models
 
         [FirestoreProperty]
         public Timestamp CreatedAt { get; set; } = Timestamp.FromDateTime(DateTime.UtcNow);
+
+        [FirestoreProperty]
+        public Timestamp? AgreementDate { get; set; }
+
     }
 
 }
