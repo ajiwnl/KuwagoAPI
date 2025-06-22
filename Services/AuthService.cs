@@ -248,7 +248,33 @@ namespace KuwagoAPI.Services
 
             try
             {
+                // Find user by email in Firestore
+                var userQuery = await _firestoreDb.Collection("Users")
+                    .WhereEqualTo("Email", email)
+                    .GetSnapshotAsync();
+
+                if (userQuery.Documents.Count == 0)
+                {
+                    return new StatusResponse
+                    {
+                        Success = false,
+                        Message = "No account found with that email.",
+                        StatusCode = 404
+                    };
+                }
+
+                var user = userQuery.Documents[0].ConvertTo<mUser>();
                 var link = await _firebaseAdminAuth.GeneratePasswordResetLinkAsync(email);
+
+                var userObj = new
+                {
+                    uid = user.UID,
+                    email = user.Email,
+                    firstName = user.FirstName,
+                    lastName = user.LastName,
+                    username = user.Username,
+                    createdAt = user.createdAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+                };
 
                 return new StatusResponse
                 {
@@ -257,6 +283,7 @@ namespace KuwagoAPI.Services
                     StatusCode = 200,
                     Data = new
                     {
+                        User = userObj,
                         VerificationLink = link
                     }
                 };
