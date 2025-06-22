@@ -34,6 +34,9 @@ namespace KuwagoAPI.Models
         public string LoanPurpose { get; set; }
 
         [FirestoreProperty]
+        public string LoanStatus { get; set; }
+
+        [FirestoreProperty]
         public Timestamp CreatedAt { get; set; } = Timestamp.FromDateTime(DateTime.UtcNow);
     }
 

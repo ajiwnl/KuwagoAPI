@@ -2,6 +2,7 @@
 using KuwagoAPI.DTO;
 using KuwagoAPI.Helper;
 using KuwagoAPI.Models;
+using static KuwagoAPI.Helper.LoanEnums;
 
 namespace KuwagoAPI.Services
 {
@@ -57,7 +58,9 @@ namespace KuwagoAPI.Services
                     LoanType = dto.LoanType.ToString(),
                     LoanAmount = (int)dto.LoanAmount,
                     LoanPurpose = dto.LoanPurpose,
-                    CreatedAt = Timestamp.FromDateTime(DateTime.UtcNow)
+                    CreatedAt = Timestamp.FromDateTime(DateTime.UtcNow),
+                    LoanStatus = LoanStatus.Pending.ToString()
+
                 };
 
                 var docRef = _firestoreDb.Collection("LoanRequests").Document();
@@ -90,6 +93,7 @@ namespace KuwagoAPI.Services
                             loan.LoanType,
                             loan.LoanAmount,
                             loan.LoanPurpose,
+                            loan.LoanStatus,
                             CreatedAt = loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
                         }
                     }
@@ -105,5 +109,324 @@ namespace KuwagoAPI.Services
                 };
             }
         }
+
+        public async Task<StatusResponse> GetLoanRequestsByUIDAsync(string uid)
+        {
+            try
+            {
+                // Fetch user document
+                var userSnapshot = await _firestoreDb.Collection("Users").Document(uid).GetSnapshotAsync();
+
+                if (!userSnapshot.Exists)
+                {
+                    return new StatusResponse
+                    {
+                        Success = false,
+                        Message = "User not found.",
+                        StatusCode = 404
+                    };
+                }
+
+                var user = userSnapshot.ConvertTo<mUser>();
+
+                // Query loan requests for this UID
+                var loanQuery = _firestoreDb.Collection("LoanRequests").WhereEqualTo("UID", uid);
+                var loanSnapshots = await loanQuery.GetSnapshotAsync();
+
+                var loans = loanSnapshots.Documents.Select(doc =>
+                {
+                    var loan = doc.ConvertTo<mLoans>();
+                    return new
+                    {
+                        loan.UID,
+                        loan.MaritalStatus,
+                        loan.HighestEducation,
+                        loan.EmploymentInformation,
+                        loan.DetailedAddress,
+                        loan.ResidentType,
+                        loan.LoanType,
+                        loan.LoanAmount,
+                        loan.LoanPurpose,
+                        loan.LoanStatus,
+                        CreatedAt = loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+                    };
+                }).ToList();
+
+                return new StatusResponse
+                {
+                    Success = true,
+                    Message = "Loan requests retrieved successfully.",
+                    StatusCode = 200,
+                    Data = new
+                    {
+                        UserInfo = new
+                        {
+                            user.UID,
+                            user.FirstName,
+                            user.LastName,
+                            user.Email,
+                            user.Username,
+                            user.PhoneNumber
+                        },
+                        Loans = loans
+                    }
+                };
+            }
+            catch (Exception ex)
+            {
+                return new StatusResponse
+                {
+                    Success = false,
+                    Message = $"An unexpected error occurred: {ex.Message}",
+                    StatusCode = 500
+                };
+            }
+        }
+
+        public async Task<StatusResponse> FilterLoanRequestsAsync(string uid, LoanFilterDTO filter)
+        {
+            try
+            {
+                var userDoc = await _firestoreDb.Collection("Users").Document(uid).GetSnapshotAsync();
+                if (!userDoc.Exists)
+                {
+                    return new StatusResponse
+                    {
+                        Success = false,
+                        Message = "User not found.",
+                        StatusCode = 404
+                    };
+                }
+
+                var user = userDoc.ConvertTo<mUser>();
+
+                Query query = _firestoreDb.Collection("LoanRequests").WhereEqualTo("UID", uid);
+
+                if (filter.LoanStatus.HasValue)
+                    query = query.WhereEqualTo("LoanStatus", filter.LoanStatus.Value.ToString());
+
+                if (filter.LoanType.HasValue)
+                    query = query.WhereEqualTo("LoanType", filter.LoanType.Value.ToString());
+
+                var snapshot = await query.GetSnapshotAsync();
+
+                var loans = snapshot.Documents.Select(doc =>
+                {
+                    var loan = doc.ConvertTo<mLoans>();
+                    return new
+                    {
+                        loan.UID,
+                        loan.MaritalStatus,
+                        loan.HighestEducation,
+                        loan.EmploymentInformation,
+                        loan.DetailedAddress,
+                        loan.ResidentType,
+                        loan.LoanType,
+                        loan.LoanAmount,
+                        loan.LoanPurpose,
+                        loan.LoanStatus,
+                        CreatedAt = loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+                    };
+                }).ToList();
+
+                return new StatusResponse
+                {
+                    Success = true,
+                    Message = "Filtered loan requests retrieved successfully.",
+                    StatusCode = 200,
+                    Data = new
+                    {
+                        UserInfo = new
+                        {
+                            user.UID,
+                            user.FirstName,
+                            user.LastName,
+                            user.Email,
+                            user.Username,
+                            user.PhoneNumber
+                        },
+                        Loans = loans
+                    }
+                };
+            }
+            catch (Exception ex)
+            {
+                return new StatusResponse
+                {
+                    Success = false,
+                    Message = $"An unexpected error occurred: {ex.Message}",
+                    StatusCode = 500
+                };
+            }
+        }
+
+        public async Task<StatusResponse> GetAllLoanRequestsAsync()
+        {
+            try
+            {
+                var snapshot = await _firestoreDb.Collection("LoanRequests").GetSnapshotAsync();
+
+                if (snapshot.Count == 0)
+                {
+                    return new StatusResponse
+                    {
+                        Success = true,
+                        Message = "No loan requests found.",
+                        StatusCode = 200,
+                        Data = new List<object>()
+                    };
+                }
+
+                var loanList = new List<object>();
+
+                foreach (var doc in snapshot.Documents)
+                {
+                    var loan = doc.ConvertTo<mLoans>();
+
+                    // Get user info
+                    var userSnapshot = await _firestoreDb.Collection("Users").Document(loan.UID).GetSnapshotAsync();
+                    var user = userSnapshot.Exists ? userSnapshot.ConvertTo<mUser>() : null;
+
+                    loanList.Add(new
+                    {
+                        LoanInfo = new
+                        {
+                            loan.UID,
+                            loan.MaritalStatus,
+                            loan.HighestEducation,
+                            loan.EmploymentInformation,
+                            loan.DetailedAddress,
+                            loan.ResidentType,
+                            loan.LoanType,
+                            loan.LoanAmount,
+                            loan.LoanPurpose,
+                            loan.LoanStatus,
+                            CreatedAt = loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+                        },
+                        UserInfo = user == null ? null : new
+                        {
+                            user.UID,
+                            user.FirstName,
+                            user.LastName,
+                            user.Email,
+                            user.Username,
+                            user.PhoneNumber
+                        }
+                    });
+                }
+
+                return new StatusResponse
+                {
+                    Success = true,
+                    Message = "All loan requests retrieved successfully.",
+                    StatusCode = 200,
+                    Data = loanList
+                };
+            }
+            catch (Exception ex)
+            {
+                return new StatusResponse
+                {
+                    Success = false,
+                    Message = $"An error occurred: {ex.Message}",
+                    StatusCode = 500
+                };
+            }
+        }
+
+        public async Task<StatusResponse> FilterLoanRequestsAsync(LoanFilterDTOv2 filter)
+        {
+            try
+            {
+                var loanSnapshots = await _firestoreDb.Collection("LoanRequests").GetSnapshotAsync();
+                var loanDocs = loanSnapshots.Documents;
+
+                var result = new List<object>();
+
+                foreach (var loanDoc in loanDocs)
+                {
+                    var loan = loanDoc.ConvertTo<mLoans>();
+
+                    // Load related user
+                    var userSnapshot = await _firestoreDb.Collection("Users").Document(loan.UID).GetSnapshotAsync();
+                    if (!userSnapshot.Exists) continue;
+
+                    var user = userSnapshot.ConvertTo<mUser>();
+
+                    // Filters
+                    if (!string.IsNullOrWhiteSpace(filter.FirstName) &&
+                        !user.FirstName.Contains(filter.FirstName, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (!string.IsNullOrWhiteSpace(filter.LastName) &&
+                        !user.LastName.Contains(filter.LastName, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (!string.IsNullOrWhiteSpace(filter.Email) &&
+                        !user.Email.Equals(filter.Email, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (!string.IsNullOrWhiteSpace(filter.LoanStatus) &&
+                        !loan.LoanStatus.Equals(filter.LoanStatus, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (filter.CreatedAfter.HasValue &&
+                        loan.CreatedAt.ToDateTime() < filter.CreatedAfter.Value)
+                        continue;
+
+                    if (filter.CreatedBefore.HasValue &&
+                        loan.CreatedAt.ToDateTime() > filter.CreatedBefore.Value)
+                        continue;
+
+                    result.Add(new
+                    {
+                        LoanInfo = new
+                        {
+                            loan.UID,
+                            loan.MaritalStatus,
+                            loan.HighestEducation,
+                            loan.EmploymentInformation,
+                            loan.DetailedAddress,
+                            loan.ResidentType,
+                            loan.LoanType,
+                            loan.LoanAmount,
+                            loan.LoanPurpose,
+                            loan.LoanStatus,
+                            CreatedAt = loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+                        },
+                        UserInfo = new
+                        {
+                            user.UID,
+                            user.FirstName,
+                            user.LastName,
+                            user.Email,
+                            user.Username,
+                            user.PhoneNumber
+                        }
+                    });
+                }
+
+                return new StatusResponse
+                {
+                    Success = true,
+                    Message = "Filtered loan requests retrieved successfully.",
+                    StatusCode = 200,
+                    Data = result
+                };
+            }
+            catch (Exception ex)
+            {
+                return new StatusResponse
+                {
+                    Success = false,
+                    Message = $"An error occurred: {ex.Message}",
+                    StatusCode = 500
+                };
+            }
+        }
+
+
+
+
     }
 }
