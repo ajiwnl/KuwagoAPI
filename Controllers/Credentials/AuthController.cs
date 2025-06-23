@@ -160,7 +160,7 @@ namespace KuwagoAPI.Controllers.Credentials
             });
         }
 
-        [Authorize(Policy = "AdminOnly")]
+        [Authorize(Policy = "AdminLendersBorrowers")]
         [HttpGet("GetSpecificUser")]
         public async Task<IActionResult> GetSpecificUser(
     [FromQuery] string? UID,
