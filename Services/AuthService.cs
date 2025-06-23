@@ -148,8 +148,6 @@ namespace KuwagoAPI.Services
                             user.FirstName,
                             user.LastName,
                             user.Username,
-                            user.Role,
-                            user.Status,
                             CreatedAt = user.createdAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
                         },
                         VerificationLink = verificationLink
