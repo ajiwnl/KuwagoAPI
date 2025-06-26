@@ -487,6 +487,7 @@ namespace KuwagoAPI.Services
                     LenderUID = lenderUid,
                     BorrowerUID = loan.UID,
                     InterestRate = dto.InterestRate,
+                    LoanRequestID = dto.LoanRequestID,
                     AgreementDate = Timestamp.FromDateTime(DateTime.UtcNow)
                 };
 
@@ -623,6 +624,17 @@ namespace KuwagoAPI.Services
                     if (filter.AgreementDateAfter.HasValue && agreementDate < filter.AgreementDateAfter.Value) continue;
                     if (filter.AgreementDateBefore.HasValue && agreementDate > filter.AgreementDateBefore.Value) continue;
 
+                    // Retrieve LoanRequestID from AgreedLoan (must be saved there when created)
+                    var loanRequestId = agreedLoan.ContainsKey("LoanRequestID") ? agreedLoan["LoanRequestID"].ToString() : null;
+                    if (string.IsNullOrWhiteSpace(loanRequestId))
+                        continue;
+
+                    var loanSnapshot = await _firestoreDb.Collection("LoanRequests").Document(loanRequestId).GetSnapshotAsync();
+                    if (!loanSnapshot.Exists)
+                        continue;
+
+                    var loan = loanSnapshot.ConvertTo<mLoans>();
+
                     result.Add(new
                     {
                         AgreedLoanID = agreedLoanId,
@@ -642,8 +654,23 @@ namespace KuwagoAPI.Services
                             borrower.LastName,
                             borrower.Email
                         },
-                        UpdatedLoanInfo = agreedLoan["UpdatedLoan"]
+                        UpdatedLoanInfo = new
+                        {
+                            loan.LoanRequestID,
+                            loan.UID,
+                            loan.MaritalStatus,
+                            loan.HighestEducation,
+                            loan.EmploymentInformation,
+                            loan.DetailedAddress,
+                            loan.ResidentType,
+                            loan.LoanType,
+                            loan.LoanAmount,
+                            loan.LoanPurpose,
+                            loan.LoanStatus,
+                            CreatedAt = loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+                        }
                     });
+
                 }
 
                 return new StatusResponse
