@@ -94,7 +94,7 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("AdminLendersBorrowers", policy =>
+    options.AddPolicy("All", policy =>
         policy.RequireAssertion(context =>
         {
             var roleClaim = context.User.FindFirst(ClaimTypes.Role)?.Value;
@@ -126,6 +126,12 @@ builder.Services.AddAuthorization(options =>
       var roleClaim = context.User.FindFirst(ClaimTypes.Role)?.Value;
       return roleClaim == "0" || roleClaim == "1";
   }));
+    options.AddPolicy("LenderBorrower", policy =>
+policy.RequireAssertion(context =>
+{
+    var roleClaim = context.User.FindFirst(ClaimTypes.Role)?.Value;
+    return roleClaim == "1" || roleClaim == "2";
+}));
 });
 
 

@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 
+
+
 namespace KuwagoAPI.Controllers.Loan
 {
     [ApiController]
@@ -75,6 +77,15 @@ namespace KuwagoAPI.Controllers.Loan
             var result = await _loanService.ProcessLoanAgreementAsync(dto, adminUid);
             return StatusCode(result.StatusCode, result);
         }
+
+        [Authorize(Policy ="All")]
+        [HttpPost("FilterAgreedLoans")]
+        public async Task<IActionResult> FilterAgreedLoans([FromBody] AgreedLoanFilterDTO filter)
+        {
+            var response = await _loanService.FilterAgreedLoansAsync(filter);
+            return StatusCode(response.StatusCode, response);
+        }
+
 
     }
 
