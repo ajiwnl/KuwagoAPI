@@ -71,7 +71,7 @@ namespace KuwagoAPI.Controllers.Credentials
 
 
 
-        [Authorize(Policy = "AdminLendersBorrowers")]
+        [Authorize(Policy = "All")]
         [HttpPost("logout")]
         public IActionResult Logout()
         {
@@ -109,7 +109,7 @@ namespace KuwagoAPI.Controllers.Credentials
             });
         }
 
-        [Authorize(Policy = "AdminLendersBorrowers")]
+        [Authorize(Policy = "All")]
         [HttpGet("GetUserLoggedInInfo")]
         public async Task<IActionResult> GetUserLoggedInInfo()
         {
@@ -160,7 +160,7 @@ namespace KuwagoAPI.Controllers.Credentials
             });
         }
 
-        [Authorize(Policy = "AdminLendersBorrowers")]
+        [Authorize(Policy = "All")]
         [HttpGet("GetSpecificUser")]
         public async Task<IActionResult> GetSpecificUser(
     [FromQuery] string? UID,
@@ -262,7 +262,7 @@ namespace KuwagoAPI.Controllers.Credentials
             });
         }
 
-        [Authorize(Policy = "AdminLendersBorrowers")]
+        [Authorize(Policy = "All")]
         [Authorize]
         [HttpPut("EditUserInfoRequest")]
         public async Task<IActionResult> EditUserInfoRequest([FromBody] EditUserInfoRequest request)
@@ -283,7 +283,7 @@ namespace KuwagoAPI.Controllers.Credentials
             return StatusCode(result.StatusCode, result);
         }
 
-        [Authorize(Policy = "AdminLendersBorrowers")]
+        [Authorize(Policy = "All")]
         [HttpPut("ChangeEmail")]
         public async Task<IActionResult> ChangeEmail([FromBody] ChangeEmailRequest request)
         {
@@ -339,7 +339,7 @@ namespace KuwagoAPI.Controllers.Credentials
         }
 
 
-        [Authorize(Policy = "AdminLendersBorrowers")]
+        [Authorize(Policy = "All")]
         [HttpPut("ChangePassword")]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
         {
@@ -359,7 +359,7 @@ namespace KuwagoAPI.Controllers.Credentials
             return StatusCode(result.StatusCode, result);
         }
 
-        [Authorize(Policy = "AdminLendersBorrowers")]
+        [Authorize(Policy = "All")]
         [HttpPost("UploadProfilePicture")]
         public async Task<IActionResult> UploadProfilePicture(IFormFile profilePicture)
         {

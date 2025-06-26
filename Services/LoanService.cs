@@ -453,10 +453,13 @@ namespace KuwagoAPI.Services
                 if (dto.UpdatedLoanAmount < 0)
                     return new StatusResponse { Success = false, Message = "Loan amount cannot be negative.", StatusCode = 400 };
 
-                if (string.IsNullOrWhiteSpace(lenderUid))
-                    return new StatusResponse { Success = false, Message = "Admin UID is missing or invalid.", StatusCode = 401 };
+                if (dto.InterestRate < 0 || dto.InterestRate > 100)
+                    return new StatusResponse { Success = false, Message = "Interest rate must be between 0 and 100.", StatusCode = 400 };
 
-                // Retrieve loan document
+                if (string.IsNullOrWhiteSpace(lenderUid))
+                    return new StatusResponse { Success = false, Message = "Lender UID is missing or invalid.", StatusCode = 401 };
+
+                //Retrieve loan request
                 var loanDocRef = _firestoreDb.Collection("LoanRequests").Document(dto.LoanRequestID);
                 var loanSnapshot = await loanDocRef.GetSnapshotAsync();
 
@@ -465,68 +468,67 @@ namespace KuwagoAPI.Services
 
                 var loan = loanSnapshot.ConvertTo<mLoans>();
 
-                // Retrieve borrower info
-                var userSnapshot = await _firestoreDb.Collection("Users").Document(loan.UID).GetSnapshotAsync();
-                if (!userSnapshot.Exists)
+                //Retrieve borrower
+                var borrowerSnapshot = await _firestoreDb.Collection("Users").Document(loan.UID).GetSnapshotAsync();
+                if (!borrowerSnapshot.Exists)
                     return new StatusResponse { Success = false, Message = "Loan requester user not found.", StatusCode = 404 };
 
-                var user = userSnapshot.ConvertTo<mUser>();
+                var borrower = borrowerSnapshot.ConvertTo<mUser>();
 
-                // Retrieve admin info
+                // Retrieve lender
                 var lenderSnapshot = await _firestoreDb.Collection("Users").Document(lenderUid).GetSnapshotAsync();
-                var lenderUser = lenderSnapshot.Exists ? lenderSnapshot.ConvertTo<mUser>() : null;
+                var lender = lenderSnapshot.Exists ? lenderSnapshot.ConvertTo<mUser>() : null;
 
-                // Prevent downgrading
-                if (Enum.TryParse(loan.LoanStatus, out LoanStatus currentStatus) &&
-                    currentStatus == LoanStatus.Approved &&
-                    parsedStatus == LoanStatus.Pending)
+                // Prepare AgreedLoan document
+                var agreedLoanDocRef = _firestoreDb.Collection("AgreedLoans").Document();
+                var agreedLoan = new
                 {
-                    return new StatusResponse
-                    {
-                        Success = false,
-                        Message = "Cannot downgrade status from Active to Pending.",
-                        StatusCode = 400
-                    };
-                }
+                    AgreedLoanID = agreedLoanDocRef.Id,
+                    LenderUID = lenderUid,
+                    BorrowerUID = loan.UID,
+                    InterestRate = dto.InterestRate,
+                    AgreementDate = Timestamp.FromDateTime(DateTime.UtcNow)
+                };
 
-                // Update loan in Firestore
-                Dictionary<string, object> updates = new()
+                await agreedLoanDocRef.SetAsync(agreedLoan);
+
+                //Update the original loan status
+                Dictionary<string, object> loanUpdates = new()
         {
             { "LoanStatus", parsedStatus.ToString() },
             { "LoanAmount", dto.UpdatedLoanAmount },
             { "AgreementDate", Timestamp.FromDateTime(DateTime.UtcNow) }
         };
-                await loanDocRef.UpdateAsync(updates);
+                await loanDocRef.UpdateAsync(loanUpdates);
 
-                // Update loan object for response
-                loan.LoanStatus = parsedStatus.ToString();
-                loan.LoanAmount = dto.UpdatedLoanAmount;
-
+                // Final response
                 return new StatusResponse
                 {
                     Success = true,
-                    Message = "Loan agreement processed successfully.",
+                    Message = "Loan agreement processed and saved to AgreedLoans successfully.",
                     StatusCode = 200,
                     Data = new
                     {
-                        lenderUID = lenderUid,
-                        lenderInfo = lenderUser == null ? null : new
+                        AgreedLoanID = agreedLoanDocRef.Id,
+                        AgreementDate = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"),
+                        InterestRate = dto.InterestRate,
+                        LenderInfo = lender == null ? null : new
                         {
-                            lenderUser.UID,
-                            lenderUser.FirstName,
-                            lenderUser.LastName,
-                            lenderUser.Email,
-                            lenderUser.Username,
-                            lenderUser.PhoneNumber
+                            lender.UID,
+                            lender.FirstName,
+                            lender.LastName,
+                            lender.Email,
+                            lender.Username,
+                            lender.PhoneNumber
                         },
                         BorrowerInfo = new
                         {
-                            user.UID,
-                            user.FirstName,
-                            user.LastName,
-                            user.Email,
-                            user.Username,
-                            user.PhoneNumber
+                            borrower.UID,
+                            borrower.FirstName,
+                            borrower.LastName,
+                            borrower.Email,
+                            borrower.Username,
+                            borrower.PhoneNumber
                         },
                         UpdatedLoanInfo = new
                         {
@@ -538,11 +540,10 @@ namespace KuwagoAPI.Services
                             loan.DetailedAddress,
                             loan.ResidentType,
                             loan.LoanType,
-                            loan.LoanAmount,
+                            LoanAmount = dto.UpdatedLoanAmount,
                             loan.LoanPurpose,
-                            loan.LoanStatus,
-                            CreatedAt = loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss"),
-                            AgreementDate = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")
+                            LoanStatus = parsedStatus.ToString(),
+                            CreatedAt = loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
                         }
                     }
                 };
@@ -558,6 +559,114 @@ namespace KuwagoAPI.Services
             }
         }
 
+        public async Task<StatusResponse> FilterAgreedLoansAsync(AgreedLoanFilterDTO filter)
+        {
+            try
+            {
+                var snapshot = await _firestoreDb.Collection("AgreedLoans").GetSnapshotAsync();
+                var result = new List<object>();
+
+                foreach (var doc in snapshot.Documents)
+                {
+                    var agreedLoan = doc.ToDictionary();
+
+                    // Extract base fields
+                    string agreedLoanId = agreedLoan["AgreedLoanID"].ToString();
+                    string borrowerUid = agreedLoan["BorrowerUID"].ToString();
+                    string lenderUid = agreedLoan["LenderUID"].ToString();
+                    double interestRate = Convert.ToDouble(agreedLoan["InterestRate"]);
+                    DateTime agreementDate = ((Timestamp)agreedLoan["AgreementDate"]).ToDateTime();
+
+                    // Apply UID & AgreedLoanID filters first
+                    if (!string.IsNullOrWhiteSpace(filter.AgreedLoanID) &&
+                        !string.Equals(agreedLoanId, filter.AgreedLoanID, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (!string.IsNullOrWhiteSpace(filter.BorrowerUID) &&
+                        !string.Equals(borrowerUid, filter.BorrowerUID, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (!string.IsNullOrWhiteSpace(filter.LenderUID) &&
+                        !string.Equals(lenderUid, filter.LenderUID, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    // Retrieve borrower
+                    var borrowerSnapshot = await _firestoreDb.Collection("Users").Document(borrowerUid).GetSnapshotAsync();
+                    if (!borrowerSnapshot.Exists) continue;
+                    var borrower = borrowerSnapshot.ConvertTo<mUser>();
+
+                    // Retrieve lender
+                    var lenderSnapshot = await _firestoreDb.Collection("Users").Document(lenderUid).GetSnapshotAsync();
+                    if (!lenderSnapshot.Exists) continue;
+                    var lender = lenderSnapshot.ConvertTo<mUser>();
+
+                    // Apply name and date filters
+                    if (!string.IsNullOrWhiteSpace(filter.BorrowerFirstName) &&
+                        !borrower.FirstName.Contains(filter.BorrowerFirstName, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (!string.IsNullOrWhiteSpace(filter.BorrowerLastName) &&
+                        !borrower.LastName.Contains(filter.BorrowerLastName, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (!string.IsNullOrWhiteSpace(filter.LenderFirstName) &&
+                        !lender.FirstName.Contains(filter.LenderFirstName, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (!string.IsNullOrWhiteSpace(filter.LenderLastName) &&
+                        !lender.LastName.Contains(filter.LenderLastName, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (filter.MinInterestRate.HasValue && interestRate < filter.MinInterestRate.Value) continue;
+                    if (filter.MaxInterestRate.HasValue && interestRate > filter.MaxInterestRate.Value) continue;
+
+                    if (filter.AgreementDateAfter.HasValue && agreementDate < filter.AgreementDateAfter.Value) continue;
+                    if (filter.AgreementDateBefore.HasValue && agreementDate > filter.AgreementDateBefore.Value) continue;
+
+                    result.Add(new
+                    {
+                        AgreedLoanID = agreedLoanId,
+                        InterestRate = interestRate,
+                        AgreementDate = agreementDate.ToString("yyyy-MM-dd HH:mm:ss"),
+                        LenderInfo = new
+                        {
+                            lender.UID,
+                            lender.FirstName,
+                            lender.LastName,
+                            lender.Email
+                        },
+                        BorrowerInfo = new
+                        {
+                            borrower.UID,
+                            borrower.FirstName,
+                            borrower.LastName,
+                            borrower.Email
+                        },
+                        UpdatedLoanInfo = agreedLoan["UpdatedLoan"]
+                    });
+                }
+
+                return new StatusResponse
+                {
+                    Success = true,
+                    Message = "Filtered agreed loans retrieved successfully.",
+                    StatusCode = 200,
+                    Data = result
+                };
+            }
+            catch (Exception ex)
+            {
+                return new StatusResponse
+                {
+                    Success = false,
+                    Message = $"An error occurred: {ex.Message}",
+                    StatusCode = 500
+                };
+            }
+        }
+
 
     }
+
+
 }
