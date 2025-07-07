@@ -96,7 +96,7 @@ namespace KuwagoAPI.Controllers.IdentityVerification
             });
         }
 
-        [Authorize(Policy = "BorrowerOnly")]
+        [Authorize(Policy = "All")]
         [HttpGet("GetIdentityLoggedInVerification")]
         public async Task<IActionResult> GetIdentityVerification()
         {
