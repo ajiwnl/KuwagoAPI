@@ -139,7 +139,8 @@ namespace KuwagoAPI.Controllers.IdentityVerification
                 }
             });
         }
-        [Authorize(Policy = "All")]
+
+        [Authorize(Policy = "BorrowerOnly")]
         [HttpPost("VerifyFaceMatch")]
         public async Task<IActionResult> VerifyFaceMatch()
         {
@@ -167,14 +168,25 @@ namespace KuwagoAPI.Controllers.IdentityVerification
             }
 
             var result = await _faceVerificationService.VerifyFaceMatchAsync(verification.IDUrl, verification.SelfieUrl);
+            var confidence = Convert.ToDouble(result?.GetType().GetProperty("confidence")?.GetValue(result));
+            var verifyStatus = confidence >= 80 ? VerificationStatus.Passed : VerificationStatus.Failed;
+
+            // Save to Firestore
+            await _verificationService.UpdateVerificationResultAsync(user.UID, confidence, verifyStatus);
 
             return Ok(new StatusResponse
             {
                 Success = true,
                 Message = "Face verification completed.",
                 StatusCode = 200,
-                Data = result
+                Data = new
+                {
+                    confidence,
+                    verifyStatus = (int)verifyStatus
+                }
             });
         }
+
+
     }
 }

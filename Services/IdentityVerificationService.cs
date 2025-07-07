@@ -1,4 +1,5 @@
 ﻿using Google.Cloud.Firestore;
+using KuwagoAPI.Helper;
 using KuwagoAPI.Models;
 
 namespace KuwagoAPI.Services
@@ -40,6 +41,20 @@ namespace KuwagoAPI.Services
             if (!snapshot.Exists) return null;
 
             return snapshot.ConvertTo<mIdentityVerification>();
+        }
+
+        public async Task UpdateVerificationResultAsync(string uid, double confidence, VerificationStatus verifyStatus)
+        {
+            var docRef = _firestoreDb.Collection("ID Photos").Document(uid);
+
+            var updates = new Dictionary<string, object>
+    {
+        { "ConfidenceLevel", confidence },
+        { "VerifyStatus", (int)verifyStatus }, // save as int to Firestore
+        { "VerifiedAt", Timestamp.FromDateTime(DateTime.UtcNow) }
+    };
+
+            await docRef.UpdateAsync(updates);
         }
 
 
