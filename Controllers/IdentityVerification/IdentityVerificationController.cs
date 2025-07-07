@@ -139,7 +139,7 @@ namespace KuwagoAPI.Controllers.IdentityVerification
                 }
             });
         }
-        [Authorize(Policy = "BorrowerOnly")]
+        [Authorize(Policy = "All")]
         [HttpPost("VerifyFaceMatch")]
         public async Task<IActionResult> VerifyFaceMatch()
         {
@@ -173,7 +173,7 @@ namespace KuwagoAPI.Controllers.IdentityVerification
                 Success = true,
                 Message = "Face verification completed.",
                 StatusCode = 200,
-                Data = JsonSerializer.Deserialize<object>(result)
+                Data = result
             });
         }
     }
