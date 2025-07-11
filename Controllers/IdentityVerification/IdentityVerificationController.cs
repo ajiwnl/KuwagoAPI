@@ -7,7 +7,12 @@ using System.Text.Json;
 
 namespace KuwagoAPI.Controllers.IdentityVerification
 {
+
+    /// <summary>
+    /// Handles user face verification 
+    /// </summary>
     [Route("api/[controller]")]
+
     [ApiController]
     public class IdentityVerificationController : ControllerBase
     {
@@ -32,6 +37,10 @@ namespace KuwagoAPI.Controllers.IdentityVerification
         {
             return User.FindFirstValue(ClaimTypes.NameIdentifier);
         }
+
+        /// <summary>
+        /// Uploads user's Face Selfie and ID Photo
+        /// </summary>
 
         [Authorize(Policy = "BorrowerOnly")]
         [HttpPost("UploadIDAndSelfie")]
@@ -96,6 +105,10 @@ namespace KuwagoAPI.Controllers.IdentityVerification
             });
         }
 
+        /// <summary>
+        /// Get logged-in user Identity verification
+        /// </summary>
+
         [Authorize(Policy = "All")]
         [HttpGet("GetIdentityLoggedInVerification")]
         public async Task<IActionResult> GetIdentityVerification()
@@ -139,6 +152,11 @@ namespace KuwagoAPI.Controllers.IdentityVerification
                 }
             });
         }
+
+
+        /// <summary>
+        /// Handles automatic face matching for users
+        /// </summary>
 
         [Authorize(Policy = "BorrowerOnly")]
         [HttpPost("VerifyFaceMatch")]

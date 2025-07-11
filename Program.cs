@@ -6,7 +6,7 @@ using System.Diagnostics;
 using System.Security.Claims;
 using System.Text;
 using Swashbuckle.AspNetCore.SwaggerUI;
-
+using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -146,7 +146,7 @@ builder.Services.AddSwaggerGen(c =>
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "JWT Authorization header using the Bearer scheme. \r\n\r\nEnter 'Bearer' followed by your token in the text input below.\r\n\r\nExample: \"Bearer abc123\"",
+        Description = "JWT Authorization header using the Bearer scheme...",
         Name = "Authorization",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.Http,
@@ -169,8 +169,9 @@ builder.Services.AddSwaggerGen(c =>
         }
     });
 
-    c.OperationFilter<AddUnauthorizedResponseOperationFilter>();
+    c.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, $"{Assembly.GetExecutingAssembly().GetName().Name}.xml"));
 });
+
 
 
 var app = builder.Build();
