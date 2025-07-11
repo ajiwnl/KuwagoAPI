@@ -9,6 +9,10 @@ using System.Security.Claims;
 
 namespace KuwagoAPI.Controllers.Credentials
 {
+
+    /// <summary>
+    /// Handles user authentication and account management.
+    /// </summary>
     [Route("api/[controller]")]
     [ApiController]
     public class AuthController : ControllerBase
@@ -24,6 +28,12 @@ namespace KuwagoAPI.Controllers.Credentials
 
         }
 
+        /// <summary>
+        /// Registers a new user with email, password, and personal details.
+        /// </summary>
+        /// <param name="request">The registration details.</param>
+        /// <returns>Status response indicating success or error.</returns>
+
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
@@ -38,6 +48,11 @@ namespace KuwagoAPI.Controllers.Credentials
             return StatusCode(result.StatusCode, result);
         }
 
+        /// <summary>
+        /// Logs in a user and returns a JWT token.
+        /// </summary>
+        /// <param name="request">The login request with email and password.</param>
+        /// <returns>Status response with token or error.</returns>
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
@@ -84,7 +99,11 @@ namespace KuwagoAPI.Controllers.Credentials
             });
         }
 
-
+        /// <summary>
+        /// Sends a password reset email.
+        /// </summary>
+        /// <param name="request">The email address to reset password for.</param>
+        /// <returns>Status of the reset email process.</returns>
         [HttpPost("ForgotPassword")]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPassRequest request)
         {
@@ -109,6 +128,9 @@ namespace KuwagoAPI.Controllers.Credentials
             });
         }
 
+        /// <summary>
+        /// Gets the current logged-in user's profile info.
+        /// </summary>
         [Authorize(Policy = "All")]
         [HttpGet("GetUserLoggedInInfo")]
         public async Task<IActionResult> GetUserLoggedInInfo()
@@ -160,6 +182,10 @@ namespace KuwagoAPI.Controllers.Credentials
             });
         }
 
+
+        /// <summary>
+        ///Filter users to all Role
+        /// </summary>
         [Authorize(Policy = "All")]
         [HttpGet("GetSpecificUser")]
         public async Task<IActionResult> GetSpecificUser(
@@ -193,6 +219,9 @@ namespace KuwagoAPI.Controllers.Credentials
             });
         }
 
+        /// <summary>
+        /// Gets all the users on the Admin side.
+        /// </summary>
         [Authorize(Policy = "AdminOnly")]
         [HttpGet("GetAllUser")]
         public async Task<IActionResult> GetAllUser()
@@ -223,6 +252,10 @@ namespace KuwagoAPI.Controllers.Credentials
         }
 
 
+
+        /// <summary>
+        /// Checks JWT Token if valid or not
+        /// </summary>
         [Authorize]
         [HttpGet("CheckToken")]
         public IActionResult CheckJwt()
@@ -262,6 +295,10 @@ namespace KuwagoAPI.Controllers.Credentials
             });
         }
 
+
+        /// <summary>
+        /// Edit User's profile
+        /// </summary>
         [Authorize(Policy = "All")]
         [Authorize]
         [HttpPut("EditUserInfoRequest")]
@@ -283,6 +320,10 @@ namespace KuwagoAPI.Controllers.Credentials
             return StatusCode(result.StatusCode, result);
         }
 
+
+        /// <summary>
+        /// Change email endpoint
+        /// </summary>
         [Authorize(Policy = "All")]
         [HttpPut("ChangeEmail")]
         public async Task<IActionResult> ChangeEmail([FromBody] ChangeEmailRequest request)
@@ -339,6 +380,9 @@ namespace KuwagoAPI.Controllers.Credentials
         }
 
 
+        /// <summary>
+        /// Change password endpoint
+        /// </summary>
         [Authorize(Policy = "All")]
         [HttpPut("ChangePassword")]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
@@ -359,6 +403,10 @@ namespace KuwagoAPI.Controllers.Credentials
             return StatusCode(result.StatusCode, result);
         }
 
+
+        /// <summary>
+        /// Update user profile picture.
+        /// </summary>
         [Authorize(Policy = "All")]
         [HttpPost("UploadProfilePicture")]
         public async Task<IActionResult> UploadProfilePicture(IFormFile profilePicture)
