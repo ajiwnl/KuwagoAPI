@@ -10,6 +10,9 @@ using System.Security.Claims;
 
 namespace KuwagoAPI.Controllers.Loan
 {
+    /// <summary>
+    /// Handles loan request creation, retrieval, filtering, and agreements.
+    /// </summary>
     [ApiController]
     [Route("api/[controller]")]
     public class LoanController : ControllerBase
@@ -21,6 +24,11 @@ namespace KuwagoAPI.Controllers.Loan
             _loanService = loanService;
         }
 
+        /// <summary>
+        /// Submits a new loan request by a borrower.
+        /// </summary>
+        /// <param name="dto">Loan details to be submitted.</param>
+        /// <returns>Status response indicating the outcome of the loan request creation.</returns>
         [Authorize(Policy = "BorrowerOnly")]
         [HttpPost("LoanRequest")]
         public async Task<IActionResult> RequestLoan([FromBody] LoanDTO dto)
@@ -33,6 +41,11 @@ namespace KuwagoAPI.Controllers.Loan
             return StatusCode(response.StatusCode, response);
         }
 
+        /// <summary>
+        /// Retrieves all loan requests submitted by a specific borrower.
+        /// </summary>
+        /// <param name="uid">User ID of the borrower.</param>
+        /// <returns>List of loan requests.</returns>
         [Authorize(Policy = "BorrowerOnly")]
         [HttpGet("LoanRequests/{uid}")]
         public async Task<IActionResult> GetLoanRequests(string uid)
@@ -41,15 +54,24 @@ namespace KuwagoAPI.Controllers.Loan
             return StatusCode(result.StatusCode, result);
         }
 
+        /// <summary>
+        /// Filters loan requests submitted by a borrower based on specific criteria.
+        /// </summary>
+        /// <param name="uid">User ID of the borrower.</param>
+        /// <param name="filter">Filter parameters such as loan type, amount, etc.</param>
+        /// <returns>Filtered list of loan requests.</returns>
         [Authorize(Policy = "BorrowerOnly")]
         [HttpPost("FilterLoans/{uid}")]
         public async Task<IActionResult> FilterLoans(string uid, [FromBody] LoanFilterDTO filter)
         {
             var result = await _loanService.FilterLoanRequestsAsync(uid, filter);
-
             return StatusCode(result.StatusCode, result);
         }
 
+        /// <summary>
+        /// Retrieves all loan requests across all users. Accessible by Admins and Lenders.
+        /// </summary>
+        /// <returns>All loan requests in the system.</returns>
         [Authorize(Policy = "AdminLender")]
         [HttpGet("AllLoans")]
         public async Task<IActionResult> GetAllLoans()
@@ -58,6 +80,11 @@ namespace KuwagoAPI.Controllers.Loan
             return StatusCode(result.StatusCode, result);
         }
 
+        /// <summary>
+        /// Filters loan requests (Admin/Lender version) based on criteria such as amount, status, etc.
+        /// </summary>
+        /// <param name="filter">Filter parameters for admin or lender view.</param>
+        /// <returns>Filtered list of loan requests.</returns>
         [HttpPost("FilterLoans")]
         [Authorize(Policy = "AdminLender")]
         public async Task<IActionResult> FilterLoans([FromBody] LoanFilterDTOv2 filter)
@@ -66,6 +93,11 @@ namespace KuwagoAPI.Controllers.Loan
             return StatusCode(result.StatusCode, result);
         }
 
+        /// <summary>
+        /// Approves or denies a loan request. Only accessible by lenders.
+        /// </summary>
+        /// <param name="dto">Loan agreement decision and modified loan details.</param>
+        /// <returns>Result of the loan agreement processing.</returns>
         [Authorize(Policy = "LenderOnly")]
         [HttpPut("LoanAgreement")]
         public async Task<IActionResult> ApproveOrDenyLoan([FromBody] LoanAgreementDTO dto)
@@ -78,15 +110,17 @@ namespace KuwagoAPI.Controllers.Loan
             return StatusCode(result.StatusCode, result);
         }
 
-        [Authorize(Policy ="All")]
+        /// <summary>
+        /// Filters agreed (approved/denied) loan records based on specified criteria.
+        /// </summary>
+        /// <param name="filter">Filter options including borrower, loan type, status, etc.</param>
+        /// <returns>Filtered agreed loan records.</returns>
+        [Authorize(Policy = "All")]
         [HttpPost("FilterAgreedLoans")]
         public async Task<IActionResult> FilterAgreedLoans([FromBody] AgreedLoanFilterDTO filter)
         {
             var response = await _loanService.FilterAgreedLoansAsync(filter);
             return StatusCode(response.StatusCode, response);
         }
-
-
     }
-
 }

@@ -48,6 +48,7 @@ namespace KuwagoAPI
             services.AddScoped<CloudinaryService>();
             services.AddHttpClient<FaceVerificationService>();
             services.AddScoped<LoanService>();
+            services.AddScoped<CreditScoreService>();
 
 
             services.AddSession(options =>
