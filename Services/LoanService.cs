@@ -9,10 +9,13 @@ namespace KuwagoAPI.Services
     public class LoanService
     {
         private readonly FirestoreDb _firestoreDb;
+        private readonly CreditScoreService _creditScoreService;
 
-        public LoanService(FirestoreDb firestoreDb)
+
+        public LoanService(FirestoreDb firestoreDb, CreditScoreService creditScoreService)
         {
             _firestoreDb = firestoreDb;
+            _creditScoreService = creditScoreService;
         }
 
         public async Task<StatusResponse> CreateLoanRequestAsync(string uid, LoanDTO dto)
@@ -435,7 +438,7 @@ namespace KuwagoAPI.Services
         {
             try
             {
-                // Validations
+                // Basic validations
                 if (string.IsNullOrWhiteSpace(dto.LoanRequestID))
                     return new StatusResponse { Success = false, Message = "LoanRequestID is required.", StatusCode = 400 };
 
@@ -459,41 +462,49 @@ namespace KuwagoAPI.Services
                 if (string.IsNullOrWhiteSpace(lenderUid))
                     return new StatusResponse { Success = false, Message = "Lender UID is missing or invalid.", StatusCode = 401 };
 
-                //Retrieve loan request
+                if (parsedStatus == LoanStatus.Approved)
+                {
+                    if (!Enum.IsDefined(typeof(TermsOfMonths), dto.TermsOfMonths))
+                        return new StatusResponse { Success = false, Message = "Invalid TermsOfMonths provided.", StatusCode = 400 };
+
+                    if (!Enum.IsDefined(typeof(PaymentType), dto.PaymentType))
+                        return new StatusResponse { Success = false, Message = "Invalid PaymentType provided.", StatusCode = 400 };
+                }
+
+                // Get loan request
                 var loanDocRef = _firestoreDb.Collection("LoanRequests").Document(dto.LoanRequestID);
                 var loanSnapshot = await loanDocRef.GetSnapshotAsync();
-
                 if (!loanSnapshot.Exists)
                     return new StatusResponse { Success = false, Message = "Loan request not found.", StatusCode = 404 };
 
                 var loan = loanSnapshot.ConvertTo<mLoans>();
 
-                //Retrieve borrower
+                // Get borrower
                 var borrowerSnapshot = await _firestoreDb.Collection("Users").Document(loan.UID).GetSnapshotAsync();
                 if (!borrowerSnapshot.Exists)
-                    return new StatusResponse { Success = false, Message = "Loan requester user not found.", StatusCode = 404 };
-
+                    return new StatusResponse { Success = false, Message = "Borrower not found.", StatusCode = 404 };
                 var borrower = borrowerSnapshot.ConvertTo<mUser>();
 
-                // Retrieve lender
+                // Get lender
                 var lenderSnapshot = await _firestoreDb.Collection("Users").Document(lenderUid).GetSnapshotAsync();
                 var lender = lenderSnapshot.Exists ? lenderSnapshot.ConvertTo<mUser>() : null;
 
-                // Prepare AgreedLoan document
+                // Create AgreedLoan
                 var agreedLoanDocRef = _firestoreDb.Collection("AgreedLoans").Document();
-                var agreedLoan = new
+                var agreedLoanId = agreedLoanDocRef.Id;
+                await agreedLoanDocRef.SetAsync(new
                 {
-                    AgreedLoanID = agreedLoanDocRef.Id,
+                    AgreedLoanID = agreedLoanId,
                     LenderUID = lenderUid,
                     BorrowerUID = loan.UID,
                     InterestRate = dto.InterestRate,
                     LoanRequestID = dto.LoanRequestID,
-                    AgreementDate = Timestamp.FromDateTime(DateTime.UtcNow)
-                };
+                    AgreementDate = Timestamp.FromDateTime(DateTime.UtcNow),
+                    TermsOfMonths = parsedStatus == LoanStatus.Approved ? dto.TermsOfMonths.ToString() : null,
+                    PaymentType = parsedStatus == LoanStatus.Approved ? dto.PaymentType.ToString() : null
+                });
 
-                await agreedLoanDocRef.SetAsync(agreedLoan);
-
-                //Update the original loan status
+                // Update loan document
                 Dictionary<string, object> loanUpdates = new()
         {
             { "LoanStatus", parsedStatus.ToString() },
@@ -502,51 +513,60 @@ namespace KuwagoAPI.Services
         };
                 await loanDocRef.UpdateAsync(loanUpdates);
 
-                // Final response
+                // Create Payables if approved
+                List<Timestamp> paymentScheduleDates = new();
+                DocumentReference payableDocRef = null;
+                double totalPayable = 0;
+
+                if (parsedStatus == LoanStatus.Approved)
+                {
+                    var existingPayables = await _firestoreDb.Collection("Payables")
+                        .WhereEqualTo("LoanRequestID", dto.LoanRequestID)
+                        .GetSnapshotAsync();
+
+                    if (existingPayables.Count == 0)
+                    {
+                        var startDate = DateTime.UtcNow.Date.AddMonths(1);
+                        for (int i = 0; i < (int)dto.TermsOfMonths; i++)
+                            paymentScheduleDates.Add(Timestamp.FromDateTime(startDate.AddMonths(i)));
+
+                        totalPayable = dto.UpdatedLoanAmount + (dto.UpdatedLoanAmount * (dto.InterestRate / 100.0));
+
+                        payableDocRef = _firestoreDb.Collection("Payables").Document();
+                        await payableDocRef.SetAsync(new
+                        {
+                            PayableID = payableDocRef.Id,
+                            LoanRequestID = dto.LoanRequestID,
+                            BorrowerUID = loan.UID,
+                            LenderUID = lenderUid,
+                            PaymentType = dto.PaymentType.ToString(),
+                            TermsOfMonths = dto.TermsOfMonths.ToString(),
+                            TotalPayableAmount = totalPayable,
+                            PaymentSchedule = paymentScheduleDates,
+                            CreatedAt = Timestamp.FromDateTime(DateTime.UtcNow)
+                        });
+                    }
+                }
+
+                // Return
                 return new StatusResponse
                 {
                     Success = true,
-                    Message = "Loan agreement processed and saved to AgreedLoans successfully.",
+                    Message = parsedStatus == LoanStatus.Approved
+                        ? "Loan approved and agreement created successfully."
+                        : "Loan status updated successfully.",
                     StatusCode = 200,
-                    Data = new
+                    Data = parsedStatus == LoanStatus.Approved ? new
                     {
-                        AgreedLoanID = agreedLoanDocRef.Id,
-                        AgreementDate = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"),
-                        InterestRate = dto.InterestRate,
-                        LenderInfo = lender == null ? null : new
-                        {
-                            lender.UID,
-                            lender.FirstName,
-                            lender.LastName,
-                            lender.Email,
-                            lender.Username,
-                            lender.PhoneNumber
-                        },
-                        BorrowerInfo = new
-                        {
-                            borrower.UID,
-                            borrower.FirstName,
-                            borrower.LastName,
-                            borrower.Email,
-                            borrower.Username,
-                            borrower.PhoneNumber
-                        },
-                        UpdatedLoanInfo = new
-                        {
-                            loan.LoanRequestID,
-                            loan.UID,
-                            loan.MaritalStatus,
-                            loan.HighestEducation,
-                            loan.EmploymentInformation,
-                            loan.DetailedAddress,
-                            loan.ResidentType,
-                            loan.LoanType,
-                            LoanAmount = dto.UpdatedLoanAmount,
-                            loan.LoanPurpose,
-                            LoanStatus = parsedStatus.ToString(),
-                            CreatedAt = loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
-                        }
-                    }
+                        AgreedLoanID = agreedLoanId,
+                        Terms = dto.TermsOfMonths.ToString(),
+                        PaymentType = dto.PaymentType.ToString(),
+                        TotalPayableAmount = totalPayable,
+                        PayableID = payableDocRef?.Id,
+                        PaymentSchedule = paymentScheduleDates.Select(ts => ts.ToDateTime().ToString("yyyy-MM-dd")).ToList(),
+                        BorrowerUID = loan.UID,
+                        LenderUID = lenderUid
+                    } : null
                 };
             }
             catch (Exception ex)
@@ -559,6 +579,7 @@ namespace KuwagoAPI.Services
                 };
             }
         }
+
 
         public async Task<StatusResponse> FilterAgreedLoansAsync(AgreedLoanFilterDTO filter)
         {

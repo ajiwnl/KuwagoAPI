@@ -55,5 +55,20 @@
             Denied = 3,
             Completed = 4
         }
+
+        public enum TermsOfMonths
+        {
+            ThreeMonths = 3,
+            SixMonths = 6,
+            NineMonths = 9,
+            TwelveMonths = 12
+        }
+
+        public enum PaymentType
+        {
+            Cash = 1,
+            ECash = 2
+        }
+
     }
 }
