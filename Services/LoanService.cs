@@ -504,14 +504,21 @@ namespace KuwagoAPI.Services
                     PaymentType = parsedStatus == LoanStatus.Approved ? dto.PaymentType.ToString() : null
                 });
 
-                // Update loan document
-                Dictionary<string, object> loanUpdates = new()
-        {
-            { "LoanStatus", parsedStatus.ToString() },
-            { "LoanAmount", dto.UpdatedLoanAmount },
-            { "AgreementDate", Timestamp.FromDateTime(DateTime.UtcNow) }
-        };
-                await loanDocRef.UpdateAsync(loanUpdates);
+                if (!loanSnapshot.ContainsField("AgreementDate") || loanSnapshot.GetValue<Timestamp>("AgreementDate") == null)
+                {
+                    Dictionary<string, object> loanUpdates = new()
+    {
+        { "LoanStatus", parsedStatus.ToString() },
+        { "LoanAmount", dto.UpdatedLoanAmount },
+        { "AgreementDate", Timestamp.FromDateTime(DateTime.UtcNow) }
+    };
+                    await loanDocRef.UpdateAsync(loanUpdates);
+                }
+                else
+                {
+                    Console.WriteLine("AgreementDate already exists, skipping update on LoanRequests.");
+                }
+
 
                 // Create Payables if approved
                 List<Timestamp> paymentScheduleDates = new();
