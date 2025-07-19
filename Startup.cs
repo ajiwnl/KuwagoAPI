@@ -49,6 +49,7 @@ namespace KuwagoAPI
             services.AddHttpClient<FaceVerificationService>();
             services.AddScoped<LoanService>();
             services.AddScoped<CreditScoreService>();
+            services.AddScoped<PaymentService>();
 
 
             services.AddSession(options =>
