@@ -504,21 +504,21 @@ namespace KuwagoAPI.Services
                     PaymentType = parsedStatus == LoanStatus.Approved ? dto.PaymentType.ToString() : null
                 });
 
-                if (!loanSnapshot.ContainsField("AgreementDate") || loanSnapshot.GetValue<Timestamp>("AgreementDate") == null)
+                // Only update LoanRequests if AgreementDate doesn't exist
+                if (!loanSnapshot.TryGetValue("AgreementDate", out Timestamp existingAgreementDate) || existingAgreementDate == null)
                 {
                     Dictionary<string, object> loanUpdates = new()
-    {
-        { "LoanStatus", parsedStatus.ToString() },
-        { "LoanAmount", dto.UpdatedLoanAmount },
-        { "AgreementDate", Timestamp.FromDateTime(DateTime.UtcNow) }
-    };
+            {
+                { "LoanStatus", parsedStatus.ToString() },
+                { "LoanAmount", dto.UpdatedLoanAmount },
+                { "AgreementDate", Timestamp.FromDateTime(DateTime.UtcNow) }
+            };
                     await loanDocRef.UpdateAsync(loanUpdates);
                 }
                 else
                 {
                     Console.WriteLine("AgreementDate already exists, skipping update on LoanRequests.");
                 }
-
 
                 // Create Payables if approved
                 List<Timestamp> paymentScheduleDates = new();
@@ -586,7 +586,6 @@ namespace KuwagoAPI.Services
                 };
             }
         }
-
 
         public async Task<StatusResponse> FilterAgreedLoansAsync(AgreedLoanFilterDTO filter)
         {

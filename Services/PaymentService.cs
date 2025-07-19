@@ -2,6 +2,7 @@
 using KuwagoAPI.DTO;
 using KuwagoAPI.Helper;
 using KuwagoAPI.Models;
+using static KuwagoAPI.Helper.LoanEnums;
 
 namespace KuwagoAPI.Services
 {
@@ -18,76 +19,66 @@ namespace KuwagoAPI.Services
         {
             try
             {
-                // Validate amount
+                if (string.IsNullOrWhiteSpace(dto.PayableID))
+                    return new StatusResponse { Success = false, Message = "PayableID is required.", StatusCode = 400 };
+
+                if (string.IsNullOrWhiteSpace(dto.BorrowerUID))
+                    return new StatusResponse { Success = false, Message = "BorrowerUID is required.", StatusCode = 400 };
+
                 if (dto.AmountPaid <= 0)
-                    return new StatusResponse
-                    {
-                        Success = false,
-                        Message = "AmountPaid must be greater than 0.",
-                        StatusCode = 400
-                    };
+                    return new StatusResponse { Success = false, Message = "AmountPaid must be greater than zero.", StatusCode = 400 };
 
-                // Validate Payable exists
-                var payableRef = _firestoreDb.Collection("Payables").Document(dto.PayableID);
-                var payableSnapshot = await payableRef.GetSnapshotAsync();
-
+                // Get Payable
+                var payableSnapshot = await _firestoreDb.Collection("Payables").Document(dto.PayableID).GetSnapshotAsync();
                 if (!payableSnapshot.Exists)
-                    return new StatusResponse { Success = false, Message = "Payable not found.", StatusCode = 404 };
+                    return new StatusResponse { Success = false, Message = "Payable record not found.", StatusCode = 404 };
 
                 var payable = payableSnapshot.ToDictionary();
-                string borrowerUID = payable["BorrowerUID"]?.ToString();
+                double totalPayableAmount = Convert.ToDouble(payable["TotalPayableAmount"]);
+                int terms = Enum.TryParse<TermsOfMonths>(payable["TermsOfMonths"].ToString(), out var parsedTerms) ? (int)parsedTerms : 0;
 
-                // Validate borrower UID matches
-                if (dto.BorrowerUID != borrowerUID)
+                if (terms <= 0)
+                    return new StatusResponse { Success = false, Message = "Invalid TermsOfMonths value in Payable record.", StatusCode = 500 };
+
+                double requiredInstallment = Math.Round(totalPayableAmount / terms, 2);
+                if (dto.AmountPaid < requiredInstallment)
+                {
                     return new StatusResponse
                     {
                         Success = false,
-                        Message = "Borrower UID does not match the payable record.",
-                        StatusCode = 403
-                    };
-
-                // Get total payable amount
-                double totalPayable = Convert.ToDouble(payable["TotalPayableAmount"]);
-
-                // Get existing payments for this payable
-                var existingPaymentsSnapshot = await _firestoreDb.Collection("Payments")
-                    .WhereEqualTo("PayableID", dto.PayableID)
-                    .GetSnapshotAsync();
-
-                double totalPaid = existingPaymentsSnapshot.Documents
-                    .Sum(p => Convert.ToDouble(p.GetValue<double>("AmountPaid")));
-
-                double remainingBalance = totalPayable - totalPaid;
-
-                // Validate if payment exceeds remaining
-                if (dto.AmountPaid > remainingBalance)
-                    return new StatusResponse
-                    {
-                        Success = false,
-                        Message = $"Payment exceeds the remaining balance. Remaining: {remainingBalance:F2}",
+                        Message = $"Minimum payment required per installment is {requiredInstallment}. You submitted {dto.AmountPaid}.",
                         StatusCode = 400
                     };
+                }
 
-                // Submit Payment
-                var paymentRef = _firestoreDb.Collection("Payments").Document();
-                var payment = new
+                // Save Payment
+                var paymentDoc = _firestoreDb.Collection("Payments").Document();
+                await paymentDoc.SetAsync(new
                 {
-                    PaymentID = paymentRef.Id,
+                    PaymentID = paymentDoc.Id,
                     PayableID = dto.PayableID,
                     BorrowerUID = dto.BorrowerUID,
                     AmountPaid = dto.AmountPaid,
-                    PaymentDate = Timestamp.FromDateTime(dto.PaymentDate),
-                    Notes = dto.Notes ?? string.Empty
-                };
-
-                await paymentRef.SetAsync(payment);
+                    PaymentDate = Timestamp.FromDateTime(DateTime.UtcNow),
+                    Notes = dto.Notes ?? ""
+                });
+                var paymentDateString = Timestamp.FromDateTime(DateTime.UtcNow)
+                                  .ToDateTime()
+                                  .ToString("yyyy-MM-dd HH:mm:ss");
 
                 return new StatusResponse
                 {
                     Success = true,
                     Message = "Payment submitted successfully.",
                     StatusCode = 200,
-                    Data = payment
+                    Data = new
+                    {
+                        PaymentID = paymentDoc.Id,
+                        AmountPaid = dto.AmountPaid,
+                        RequiredPerInstallment = requiredInstallment,
+                        PaymentDate = paymentDateString
+
+                    }
                 };
             }
             catch (Exception ex)
@@ -95,37 +86,61 @@ namespace KuwagoAPI.Services
                 return new StatusResponse
                 {
                     Success = false,
-                    Message = $"Error submitting payment: {ex.Message}",
+                    Message = $"An error occurred: {ex.Message}",
                     StatusCode = 500
                 };
             }
         }
 
-
-        public async Task<List<mPayment>> GetPaymentsByBorrower(string borrowerUid)
+        public async Task<List<object>> GetPaymentsByBorrower(string borrowerUid)
         {
             var query = await _firestoreDb.Collection("Payments")
                 .WhereEqualTo("BorrowerUID", borrowerUid)
                 .OrderBy("PaymentDate")
                 .GetSnapshotAsync();
 
-            return query.Documents.Select(doc => doc.ConvertTo<mPayment>()).ToList();
+            return query.Documents.Select(doc =>
+            {
+                var data = doc.ToDictionary();
+                return new
+                {
+                    PaymentID = doc.Id,
+                    PayableID = data["PayableID"],
+                    BorrowerUID = data["BorrowerUID"],
+                    AmountPaid = data["AmountPaid"],
+                    PaymentDate = ((Timestamp)data["PaymentDate"]).ToDateTime().ToString("yyyy-MM-dd HH:mm:ss"),
+                    Notes = data.ContainsKey("Notes") ? data["Notes"] : ""
+                };
+            }).ToList<object>();
         }
 
-        public async Task<List<mPayment>> GetPaymentsByPayable(string payableId)
+        public async Task<List<object>> GetPaymentsByPayable(string payableId)
         {
             var query = await _firestoreDb.Collection("Payments")
                 .WhereEqualTo("PayableID", payableId)
                 .OrderBy("PaymentDate")
                 .GetSnapshotAsync();
 
-            return query.Documents.Select(doc => doc.ConvertTo<mPayment>()).ToList();
+            return query.Documents.Select(doc =>
+            {
+                var data = doc.ToDictionary();
+                return new
+                {
+                    PaymentID = doc.Id,
+                    PayableID = data["PayableID"],
+                    BorrowerUID = data["BorrowerUID"],
+                    AmountPaid = data["AmountPaid"],
+                    PaymentDate = ((Timestamp)data["PaymentDate"]).ToDateTime().ToString("yyyy-MM-dd HH:mm:ss"),
+                    Notes = data.ContainsKey("Notes") ? data["Notes"] : ""
+                };
+            }).ToList<object>();
         }
 
         public async Task<StatusResponse> GetPaymentSummary(string payableId)
         {
             var payments = await GetPaymentsByPayable(payableId);
-            var totalPaid = payments.Sum(p => p.AmountPaid);
+
+            var totalPaid = payments.Sum(p => Convert.ToDouble(((dynamic)p).AmountPaid));
 
             return new StatusResponse
             {
@@ -140,6 +155,7 @@ namespace KuwagoAPI.Services
                 }
             };
         }
+
     }
 
 }
