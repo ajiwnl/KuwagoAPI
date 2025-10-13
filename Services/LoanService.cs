@@ -67,7 +67,7 @@ namespace KuwagoAPI.Services
                 };
 
                 var docRef = _firestoreDb.Collection("LoanRequests").Document();
-                loan.LoanRequestID = docRef.Id; 
+                loan.LoanRequestID = docRef.Id;
                 await docRef.SetAsync(loan);
 
                 return new StatusResponse
@@ -141,6 +141,7 @@ namespace KuwagoAPI.Services
                 var loans = loanSnapshots.Documents.Select(doc =>
                 {
                     var loan = doc.ConvertTo<mLoans>();
+                    var createdAt = loan.CreatedAt != null ? loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss") : null;
                     return new
                     {
                         loan.LoanRequestID,
@@ -154,7 +155,7 @@ namespace KuwagoAPI.Services
                         loan.LoanAmount,
                         loan.LoanPurpose,
                         loan.LoanStatus,
-                        CreatedAt = loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+                        CreatedAt = createdAt
                     };
                 }).ToList();
 
@@ -219,6 +220,7 @@ namespace KuwagoAPI.Services
                 var loans = snapshot.Documents.Select(doc =>
                 {
                     var loan = doc.ConvertTo<mLoans>();
+                    var createdAt = loan.CreatedAt != null ? loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss") : null;
                     return new
                     {
                         loan.LoanRequestID,
@@ -232,7 +234,7 @@ namespace KuwagoAPI.Services
                         loan.LoanAmount,
                         loan.LoanPurpose,
                         loan.LoanStatus,
-                        CreatedAt = loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+                        CreatedAt = createdAt
                     };
                 }).ToList();
 
@@ -286,13 +288,19 @@ namespace KuwagoAPI.Services
 
                 var loanList = new List<object>();
 
-                foreach (var doc in snapshot.Documents)
+				// Pre-fetch user data to optimize performance
+				var userIds = snapshot.Documents.Select(doc => doc.GetValue<string>("UID")).ToList();
+				var userSnapshots = await _firestoreDb.Collection("Users")
+					.WhereIn(FieldPath.DocumentId, userIds)
+					.GetSnapshotAsync();
+				var usersDict = userSnapshots.Documents.ToDictionary(doc => doc.Id, doc => doc.ConvertTo<mUser>());
+
+				foreach (var doc in snapshot.Documents)
                 {
                     var loan = doc.ConvertTo<mLoans>();
-
+                    var createdAt = loan.CreatedAt != null ? loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss") : null;
                     // Get user info
-                    var userSnapshot = await _firestoreDb.Collection("Users").Document(loan.UID).GetSnapshotAsync();
-                    var user = userSnapshot.Exists ? userSnapshot.ConvertTo<mUser>() : null;
+                    var user = usersDict.ContainsKey(loan.UID) ? usersDict[loan.UID] : null;
 
                     loanList.Add(new
                     {
@@ -309,7 +317,7 @@ namespace KuwagoAPI.Services
                             loan.LoanAmount,
                             loan.LoanPurpose,
                             loan.LoanStatus,
-                            CreatedAt = loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+                            CreatedAt = createdAt
                         },
                         UserInfo = user == null ? null : new
                         {
@@ -354,7 +362,7 @@ namespace KuwagoAPI.Services
                 foreach (var loanDoc in loanDocs)
                 {
                     var loan = loanDoc.ConvertTo<mLoans>();
-
+                    var createdAt = loan.CreatedAt != null ? loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss") : null;
                     // Load related user
                     var userSnapshot = await _firestoreDb.Collection("Users").Document(loan.UID).GetSnapshotAsync();
                     if (!userSnapshot.Exists) continue;
@@ -379,11 +387,11 @@ namespace KuwagoAPI.Services
                         continue;
 
                     if (filter.CreatedAfter.HasValue &&
-                        loan.CreatedAt.ToDateTime() < filter.CreatedAfter.Value)
+                        (loan.CreatedAt == null || loan.CreatedAt.ToDateTime() < filter.CreatedAfter.Value))
                         continue;
 
                     if (filter.CreatedBefore.HasValue &&
-                        loan.CreatedAt.ToDateTime() > filter.CreatedBefore.Value)
+                        (loan.CreatedAt == null || loan.CreatedAt.ToDateTime() > filter.CreatedBefore.Value))
                         continue;
 
                     result.Add(new
@@ -401,7 +409,7 @@ namespace KuwagoAPI.Services
                             loan.LoanAmount,
                             loan.LoanPurpose,
                             loan.LoanStatus,
-                            CreatedAt = loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+                            CreatedAt = createdAt
                         },
                         UserInfo = new
                         {
@@ -504,26 +512,11 @@ namespace KuwagoAPI.Services
                     PaymentType = parsedStatus == LoanStatus.Approved ? dto.PaymentType.ToString() : null
                 });
 
-                // Only update LoanRequests if AgreementDate doesn't exist
-                if (!loanSnapshot.TryGetValue("AgreementDate", out Timestamp existingAgreementDate) || existingAgreementDate == null)
-                {
-                    Dictionary<string, object> loanUpdates = new()
-            {
-                { "LoanStatus", parsedStatus.ToString() },
-                { "LoanAmount", dto.UpdatedLoanAmount },
-                { "AgreementDate", Timestamp.FromDateTime(DateTime.UtcNow) }
-            };
-                    await loanDocRef.UpdateAsync(loanUpdates);
-                }
-                else
-                {
-                    Console.WriteLine("AgreementDate already exists, skipping update on LoanRequests.");
-                }
-
                 // Create Payables if approved
                 List<Timestamp> paymentScheduleDates = new();
                 DocumentReference payableDocRef = null;
                 double totalPayable = 0;
+                double paymentPerMonth = 0;
 
                 if (parsedStatus == LoanStatus.Approved)
                 {
@@ -538,6 +531,7 @@ namespace KuwagoAPI.Services
                             paymentScheduleDates.Add(Timestamp.FromDateTime(startDate.AddMonths(i)));
 
                         totalPayable = dto.UpdatedLoanAmount + (dto.UpdatedLoanAmount * (dto.InterestRate / 100.0));
+                        paymentPerMonth = totalPayable / (int)dto.TermsOfMonths;
 
                         payableDocRef = _firestoreDb.Collection("Payables").Document();
                         await payableDocRef.SetAsync(new
@@ -549,9 +543,36 @@ namespace KuwagoAPI.Services
                             PaymentType = dto.PaymentType.ToString(),
                             TermsOfMonths = dto.TermsOfMonths.ToString(),
                             TotalPayableAmount = totalPayable,
+                            PaymentPerMonth = paymentPerMonth,
                             PaymentSchedule = paymentScheduleDates,
                             CreatedAt = Timestamp.FromDateTime(DateTime.UtcNow)
                         });
+
+                        // Update LoanAmount in LoanRequests to match TotalPayableAmount
+                        await loanDocRef.UpdateAsync(new Dictionary<string, object>
+                        {
+                            { "LoanAmount", totalPayable },
+                            { "AgreementDate", Timestamp.FromDateTime(DateTime.UtcNow) },
+                            { "LoanStatus", parsedStatus.ToString() }
+                        });
+                    }
+                }
+                else
+                {
+                    // For non-approved, keep original update logic
+                    if (!loanSnapshot.ContainsField("AgreementDate") || loanSnapshot.GetValue<Timestamp>("AgreementDate") == null)
+                    {
+                        Dictionary<string, object> loanUpdates = new()
+                        {
+                            { "LoanStatus", parsedStatus.ToString() },
+                            { "LoanAmount", dto.UpdatedLoanAmount },
+                            { "AgreementDate", Timestamp.FromDateTime(DateTime.UtcNow) }
+                        };
+                        await loanDocRef.UpdateAsync(loanUpdates);
+                    }
+                    else
+                    {
+                        Console.WriteLine("AgreementDate already exists, skipping update on LoanRequests.");
                     }
                 }
 
@@ -571,6 +592,7 @@ namespace KuwagoAPI.Services
                         TotalPayableAmount = totalPayable,
                         PayableID = payableDocRef?.Id,
                         PaymentSchedule = paymentScheduleDates.Select(ts => ts.ToDateTime().ToString("yyyy-MM-dd")).ToList(),
+                        PaymentPerMonth = paymentPerMonth,
                         BorrowerUID = loan.UID,
                         LenderUID = lenderUid
                     } : null
@@ -586,6 +608,7 @@ namespace KuwagoAPI.Services
                 };
             }
         }
+
 
         public async Task<StatusResponse> FilterAgreedLoansAsync(AgreedLoanFilterDTO filter)
         {
@@ -694,7 +717,7 @@ namespace KuwagoAPI.Services
                             loan.LoanAmount,
                             loan.LoanPurpose,
                             loan.LoanStatus,
-                            CreatedAt = loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss")
+                            CreatedAt = loan.CreatedAt != null ? loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss") : null
                         }
                     });
 
