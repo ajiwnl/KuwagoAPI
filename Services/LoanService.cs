@@ -63,8 +63,14 @@ namespace KuwagoAPI.Services
                     LoanPurpose = dto.LoanPurpose,
                     CreatedAt = Timestamp.FromDateTime(DateTime.UtcNow),
                     LoanStatus = LoanStatus.Pending.ToString()
-
                 };
+
+                // Check if this is the user's first loan and initialize credit score
+                var creditScore = await _creditScoreService.GetCreditScoreAsync(uid);
+                if (creditScore == null)
+                {
+                    await _creditScoreService.InitializeCreditScoreAsync(uid);
+                }
 
                 var docRef = _firestoreDb.Collection("LoanRequests").Document();
                 loan.LoanRequestID = docRef.Id;

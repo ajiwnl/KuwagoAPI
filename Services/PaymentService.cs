@@ -9,10 +9,12 @@ namespace KuwagoAPI.Services
     public class PaymentService
     {
         private readonly FirestoreDb _firestoreDb;
+        private readonly CreditScoreService _creditScoreService;
 
-        public PaymentService(FirestoreDb firestoreDb)
+        public PaymentService(FirestoreDb firestoreDb, CreditScoreService creditScoreService)
         {
             _firestoreDb = firestoreDb;
+            _creditScoreService = creditScoreService;
         }
 
         public async Task<StatusResponse> SubmitPaymentAsync(PaymentRequestDTO dto)
@@ -92,6 +94,11 @@ namespace KuwagoAPI.Services
                         }
                     }
                 }
+
+                isOnTime = nextDueDate.HasValue && DateTime.UtcNow <= nextDueDate.Value;
+
+                // Update credit score based on payment timing
+                await _creditScoreService.UpdateCreditScoreAsync(dto.BorrowerUID, isOnTime);
 
                 // Save Payment
                 var paymentDoc = _firestoreDb.Collection("Payments").Document();
