@@ -163,6 +163,8 @@ namespace KuwagoAPI.Controllers.Credentials
             {
                 UID = user.UID,
                 FullName = $"{user.FirstName} {user.LastName}",
+                FirstName = user.FirstName,
+                LastName = user.LastName,
                 Email = user.Email,
                 PhoneNumber = user.PhoneNumber,
                 Username = user.Username,

@@ -204,23 +204,158 @@ namespace KuwagoAPI.Services
 
         public async Task<StatusResponse> GetPaymentSummary(string payableId)
         {
-            var payments = await GetPaymentsByPayable(payableId);
-
-            var totalPaid = payments.Sum(p => Convert.ToDouble(((dynamic)p).AmountPaid));
-
-            return new StatusResponse
+            try
             {
-                Success = true,
-                StatusCode = 200,
-                Data = new
+                // Fetch the payable record
+                var payableSnapshot = await _firestoreDb.Collection("Payables")
+                    .Document(payableId)
+                    .GetSnapshotAsync();
+
+                if (!payableSnapshot.Exists)
+                {
+                    return new StatusResponse
+                    {
+                        Success = false,
+                        Message = "Payable not found.",
+                        StatusCode = 404
+                    };
+                }
+
+                var payable = payableSnapshot.ToDictionary();
+                double totalPayableAmount = 0;
+
+                if (payable.ContainsKey("TotalPayableAmount"))
+                {
+                    var value = payable["TotalPayableAmount"];
+                    if (value is double d)
+                        totalPayableAmount = d;
+                    else if (value is long l)
+                        totalPayableAmount = Convert.ToDouble(l);
+                    else if (value is int i)
+                        totalPayableAmount = Convert.ToDouble(i);
+                    else
+                        totalPayableAmount = Convert.ToDouble(value);
+                }
+
+                // Get all payments for this payable
+                var payments = await GetPaymentsByPayable(payableId);
+
+                double totalPaid = 0;
+                foreach (var p in payments)
+                {
+                    var amountPaidObj = ((dynamic)p).AmountPaid;
+
+                    if (amountPaidObj is double d)
+                        totalPaid += d;
+                    else if (amountPaidObj is long l)
+                        totalPaid += Convert.ToDouble(l);
+                    else if (amountPaidObj is int i)
+                        totalPaid += Convert.ToDouble(i);
+                    else
+                        totalPaid += Convert.ToDouble(amountPaidObj);
+                }
+
+                // Compute remaining balance and status
+                double remainingBalance = Math.Round(totalPayableAmount - totalPaid, 2);
+                bool isFullyPaid = remainingBalance <= 0;
+
+                var summary = new
                 {
                     PayableID = payableId,
+                    TotalPayableAmount = totalPayableAmount,
                     TotalPaid = totalPaid,
+                    RemainingBalance = remainingBalance,
+                    IsFullyPaid = isFullyPaid,
                     PaymentCount = payments.Count,
                     Payments = payments
-                }
-            };
+                };
+
+                return new StatusResponse
+                {
+                    Success = true,
+                    StatusCode = 200,
+                    Message = "Payment summary retrieved successfully.",
+                    Data = summary
+                };
+            }
+            catch (Exception ex)
+            {
+                return new StatusResponse
+                {
+                    Success = false,
+                    Message = $"An error occurred while getting summary: {ex.Message}",
+                    StatusCode = 500
+                };
+            }
         }
+
+
+        public async Task<StatusResponse> GetPaymentScheduleDetails(string borrowerUid, string payableId)
+        {
+            try
+            {
+                var payableSnapshot = await _firestoreDb.Collection("Payables")
+                    .Document(payableId)
+                    .GetSnapshotAsync();
+
+                if (!payableSnapshot.Exists)
+                    return new StatusResponse { Success = false, Message = "Payable not found", StatusCode = 404 };
+
+                var payable = payableSnapshot.ToDictionary();
+                
+                // Verify the borrower owns this payable
+                if (payable["BorrowerUID"].ToString() != borrowerUid)
+                    return new StatusResponse { Success = false, Message = "Unauthorized access", StatusCode = 403 };
+
+                double totalPayableAmount = Convert.ToDouble(payable["TotalPayableAmount"]);
+                int terms = Enum.TryParse<TermsOfMonths>(payable["TermsOfMonths"].ToString(), out var parsedTerms) ? (int)parsedTerms : 0;
+                var paymentSchedule = payable.ContainsKey("PaymentSchedule") ? (List<object>)payable["PaymentSchedule"] : null;
+
+                var monthlyPayment = Math.Round(totalPayableAmount / terms, 2);
+
+                var scheduleDates = paymentSchedule?
+                    .OfType<Timestamp>()
+                    .Select(ts => ts.ToDateTime().ToString("yyyy-MM-dd"))
+                    .ToList() ?? new List<string>();
+
+                // Get actual paid dates
+                var paymentsQuery = await _firestoreDb.Collection("Payments")
+                    .WhereEqualTo("PayableID", payableId)
+                    .WhereEqualTo("BorrowerUID", borrowerUid)
+                    .OrderBy("PaymentDate")
+                    .GetSnapshotAsync();
+
+                var paidDates = paymentsQuery.Documents
+                    .Select(doc => ((Timestamp)doc.GetValue<Timestamp>("PaymentDate")).ToDateTime().ToString("yyyy-MM-dd"))
+                    .ToList();
+
+                return new StatusResponse
+                {
+                    Success = true,
+                    StatusCode = 200,
+                    Data = new
+                    {
+                        PayableID = payableId,
+                        BorrowerUID = borrowerUid,
+                        MonthlyPayment = monthlyPayment,
+                        TotalAmount = totalPayableAmount,
+                        Terms = terms,
+                        ScheduledDates = scheduleDates,
+                        PaidDates = paidDates
+                    }
+                };
+            }
+            catch (Exception ex)
+            {
+                return new StatusResponse
+                {
+                    Success = false,
+                    Message = $"An error occurred: {ex.Message}",
+                    StatusCode = 500
+                };
+            }
+        }
+
 
     }
 
