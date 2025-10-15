@@ -73,6 +73,20 @@ namespace KuwagoAPI.Controllers.Payment
             var result = await _paymentService.GetPaymentSummary(payableId);
             return StatusCode(result.StatusCode, result);
         }
+
+        /// <summary>
+        /// Get payment schedule details including monthly payment amount and scheduled dates
+        /// </summary>
+        /// <param name="borrowerUid">The UID of the borrower</param>
+        /// <param name="payableId">The ID of the payable loan</param>
+        /// <returns>Payment schedule details including monthly payment and dates</returns>
+        [HttpGet("schedule/{borrowerUid}/{payableId}")]
+        [Authorize(Policy = "LenderBorrower")]
+        public async Task<IActionResult> GetPaymentScheduleDetails(string borrowerUid, string payableId)
+        {
+            var result = await _paymentService.GetPaymentScheduleDetails(borrowerUid, payableId);
+            return StatusCode(result.StatusCode, result);
+        }
     }
 
 }
