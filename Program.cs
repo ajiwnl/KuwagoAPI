@@ -7,11 +7,14 @@ using System.Security.Claims;
 using System.Text;
 using Swashbuckle.AspNetCore.SwaggerUI;
 using System.Reflection;
+using KuwagoAPI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 var startup = new KuwagoAPI.Startup(builder.Configuration);
 startup.ConfigureServices(builder.Services);
+
+
 
 builder.Services.AddAuthentication(options =>
 {

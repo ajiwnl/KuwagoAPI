@@ -657,6 +657,22 @@ namespace KuwagoAPI.Services
                     if (!lenderSnapshot.Exists) continue;
                     var lender = lenderSnapshot.ConvertTo<mUser>();
 
+                    // Retrieve LoanRequestID from AgreedLoan (must be saved there when created)
+                    var loanRequestId = agreedLoan.ContainsKey("LoanRequestID") ? agreedLoan["LoanRequestID"].ToString() : null;
+                    if (string.IsNullOrWhiteSpace(loanRequestId))
+                        continue;
+
+                    var loanSnapshot = await _firestoreDb.Collection("LoanRequests").Document(loanRequestId).GetSnapshotAsync();
+                    if (!loanSnapshot.Exists)
+                        continue;
+
+                    var loan = loanSnapshot.ConvertTo<mLoans>();
+
+                    // Apply loan status filter
+                    if (!string.IsNullOrWhiteSpace(filter.LoanStatus) &&
+                        !string.Equals(loan.LoanStatus, filter.LoanStatus, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
                     // Apply name and date filters
                     if (!string.IsNullOrWhiteSpace(filter.BorrowerFirstName) &&
                         !borrower.FirstName.Contains(filter.BorrowerFirstName, StringComparison.OrdinalIgnoreCase))
@@ -679,17 +695,6 @@ namespace KuwagoAPI.Services
 
                     if (filter.AgreementDateAfter.HasValue && agreementDate < filter.AgreementDateAfter.Value) continue;
                     if (filter.AgreementDateBefore.HasValue && agreementDate > filter.AgreementDateBefore.Value) continue;
-
-                    // Retrieve LoanRequestID from AgreedLoan (must be saved there when created)
-                    var loanRequestId = agreedLoan.ContainsKey("LoanRequestID") ? agreedLoan["LoanRequestID"].ToString() : null;
-                    if (string.IsNullOrWhiteSpace(loanRequestId))
-                        continue;
-
-                    var loanSnapshot = await _firestoreDb.Collection("LoanRequests").Document(loanRequestId).GetSnapshotAsync();
-                    if (!loanSnapshot.Exists)
-                        continue;
-
-                    var loan = loanSnapshot.ConvertTo<mLoans>();
 
                     result.Add(new
                     {
