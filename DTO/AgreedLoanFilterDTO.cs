@@ -13,6 +13,7 @@
         public double? MaxInterestRate { get; set; }
         public DateTime? AgreementDateAfter { get; set; }
         public DateTime? AgreementDateBefore { get; set; }
+        public string? LoanStatus { get; set; }
     }
 
 }

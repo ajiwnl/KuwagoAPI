@@ -113,12 +113,39 @@ namespace KuwagoAPI.Controllers.Loan
         /// <summary>
         /// Filters agreed (approved/denied) loan records based on specified criteria.
         /// </summary>
-        /// <param name="filter">Filter options including borrower, loan type, status, etc.</param>
         /// <returns>Filtered agreed loan records.</returns>
         [Authorize(Policy = "All")]
-        [HttpPost("FilterAgreedLoans")]
-        public async Task<IActionResult> FilterAgreedLoans([FromBody] AgreedLoanFilterDTO filter)
+        [HttpGet("FilterAgreedLoans")]
+        public async Task<IActionResult> FilterAgreedLoans(
+            [FromQuery] string? agreedLoanId = null,
+            [FromQuery] string? borrowerUid = null,
+            [FromQuery] string? lenderUid = null,
+            [FromQuery] string? borrowerFirstName = null,
+            [FromQuery] string? borrowerLastName = null,
+            [FromQuery] string? lenderFirstName = null,
+            [FromQuery] string? lenderLastName = null,
+            [FromQuery] double? minInterestRate = null,
+            [FromQuery] double? maxInterestRate = null,
+            [FromQuery] DateTime? agreementDateAfter = null,
+            [FromQuery] DateTime? agreementDateBefore = null,
+            [FromQuery] string? loanStatus = null)
         {
+            var filter = new AgreedLoanFilterDTO
+            {
+                AgreedLoanID = agreedLoanId,
+                BorrowerUID = borrowerUid,
+                LenderUID = lenderUid,
+                BorrowerFirstName = borrowerFirstName,
+                BorrowerLastName = borrowerLastName,
+                LenderFirstName = lenderFirstName,
+                LenderLastName = lenderLastName,
+                MinInterestRate = minInterestRate,
+                MaxInterestRate = maxInterestRate,
+                AgreementDateAfter = agreementDateAfter,
+                AgreementDateBefore = agreementDateBefore,
+                LoanStatus = loanStatus
+            };
+
             var response = await _loanService.FilterAgreedLoansAsync(filter);
             return StatusCode(response.StatusCode, response);
         }
