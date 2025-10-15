@@ -16,7 +16,6 @@
 //        {
 //            _firestoreDb = firestoreDb;
 //            _creditScoreService = creditScoreService;
-//            _openAIApiKey = "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";
 //            _modelId = "ft:gpt-4.1-mini-2025-04-14:personal::BTh1TBmd";
 //        }
 
