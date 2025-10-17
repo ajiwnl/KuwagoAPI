@@ -528,16 +528,7 @@ namespace KuwagoAPI.Services
 
         public async Task<StatusResponse> GetPaymentSummary(string payableId)
         {
-<<<<<<< Updated upstream
-=======
             try
-            var payments = await GetPaymentsByPayable(payableId);
-
-            var completedPayments = payments.Where(p => ((dynamic)p).Status == "Completed").ToList();
-            var totalPaid = completedPayments.Sum(p => Convert.ToDouble(((dynamic)p).AmountPaid));
-
-            return new StatusResponse
->>>>>>> Stashed changes
             {
                 // Fetch the payable record
                 var payableSnapshot = await _firestoreDb.Collection("Payables")
@@ -597,14 +588,9 @@ namespace KuwagoAPI.Services
                     PayableID = payableId,
                     TotalPayableAmount = totalPayableAmount,
                     TotalPaid = totalPaid,
-<<<<<<< Updated upstream
                     RemainingBalance = remainingBalance,
                     IsFullyPaid = isFullyPaid,
                     PaymentCount = payments.Count,
-=======
-                    CompletedPaymentCount = completedPayments.Count,
-                    TotalPaymentCount = payments.Count,
->>>>>>> Stashed changes
                     Payments = payments
                 };
 
@@ -626,7 +612,7 @@ namespace KuwagoAPI.Services
                 };
             }
         }
-<<<<<<< Updated upstream
+
 
 
         public async Task<StatusResponse> GetPaymentScheduleDetails(string borrowerUid, string payableId)
@@ -694,9 +680,5 @@ namespace KuwagoAPI.Services
                 };
             }
         }
-
-
-=======
->>>>>>> Stashed changes
     }
 }
