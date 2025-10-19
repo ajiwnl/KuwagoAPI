@@ -469,7 +469,7 @@ namespace KuwagoAPI.Services
                     Success = true,
                     Data = new
                     {
-                        frontend_url = "https://kuwago.vercel.app/Payment/Failed",
+                        FrontendUrl = "https://kuwago.vercel.app/Payment/Failed",
                     },
                     Message = "Payment cancelled.",
                     StatusCode = 200
