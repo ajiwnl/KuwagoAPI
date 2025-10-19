@@ -50,7 +50,7 @@ namespace KuwagoAPI
             services.AddScoped<LoanService>();
             services.AddScoped<CreditScoreService>();
             services.AddScoped<PaymentService>();
-            //services.AddScoped<AIAssessmentService>();
+            services.AddScoped<AIAssessmentService>();
             services.AddScoped<AnalyticsService>();
 
 
