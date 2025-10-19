@@ -31,6 +31,42 @@ namespace KuwagoAPI.Controllers.Payment
             return StatusCode(result.StatusCode, result);
         }
 
+        [HttpGet("Success")]
+        public async Task<IActionResult> PaymentSuccess([FromQuery] string paymentId)
+        {
+            if (string.IsNullOrWhiteSpace(paymentId))
+                return BadRequest(new { Message = "Payment ID is required" });
+
+            var result = await _paymentService.CompleteECashPayment(paymentId);
+
+            if (result.Success)
+            {
+                // Redirect to success page or return success view
+                return Ok(new
+                {
+                    Message = "Payment completed successfully!",
+                    Data = result.Data
+                });
+            }
+
+            return StatusCode(result.StatusCode, result);
+        }
+
+        [HttpGet("Failed")]
+        public async Task<IActionResult> PaymentFailed([FromQuery] string paymentId)
+        {
+            if (string.IsNullOrWhiteSpace(paymentId))
+                return BadRequest(new { Message = "Payment ID is required" });
+
+            var result = await _paymentService.CancelECashPayment(paymentId);
+
+            return Ok(new
+            {
+                Message = "Payment was cancelled or failed. Please try again.",
+                PaymentId = paymentId
+            });
+        }
+
         /// <summary>
         /// Retrieve all payments made by a specific borrower.
         /// </summary>

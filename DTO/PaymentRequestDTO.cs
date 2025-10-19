@@ -7,6 +7,8 @@
         public double AmountPaid { get; set; }
         public DateTime PaymentDate { get; set; } = DateTime.UtcNow;
         public string Notes { get; set; }
+        public string PaymentType { get; set; } // "Cash" or "ECash"
+
     }
 
 }
