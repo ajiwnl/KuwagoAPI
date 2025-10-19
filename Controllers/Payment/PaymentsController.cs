@@ -23,7 +23,7 @@ namespace KuwagoAPI.Controllers.Payment
         /// <param name="request">Payment request including PayableID, BorrowerUID, AmountPaid, and PaymentType.</param>
         /// <returns>Status message indicating success or failure of the payment submission.</returns>
         [HttpPost]
-        [Authorize(Policy = "LenderOnly")]
+        [Authorize(Policy = "LenderBorrower")]
         public async Task<IActionResult> SubmitPayment([FromBody] PaymentRequestDTO dto)
 
         {
