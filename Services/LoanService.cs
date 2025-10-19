@@ -294,19 +294,30 @@ namespace KuwagoAPI.Services
 
                 var loanList = new List<object>();
 
-				// Pre-fetch user data to optimize performance
-				var userIds = snapshot.Documents.Select(doc => doc.GetValue<string>("UID")).ToList();
-				var userSnapshots = await _firestoreDb.Collection("Users")
-					.WhereIn(FieldPath.DocumentId, userIds)
-					.GetSnapshotAsync();
-				var usersDict = userSnapshots.Documents.ToDictionary(doc => doc.Id, doc => doc.ConvertTo<mUser>());
+                // Preload users
+                var userIds = snapshot.Documents.Select(doc => doc.GetValue<string>("UID")).Distinct().ToList();
+                var userSnapshots = await _firestoreDb.Collection("Users")
+                    .WhereIn(FieldPath.DocumentId, userIds)
+                    .GetSnapshotAsync();
+                var usersDict = userSnapshots.Documents.ToDictionary(doc => doc.Id, doc => doc.ConvertTo<mUser>());
 
-				foreach (var doc in snapshot.Documents)
+                // Preload payables
+                var payableSnapshots = await _firestoreDb.Collection("Payables").GetSnapshotAsync();
+                var payablesDict = payableSnapshots.Documents
+                    .ToDictionary(doc => doc.GetValue<string>("LoanRequestID"), doc => new
+                    {
+                        PayableID = doc.GetValue<string>("PayableID"),
+                        PaymentType = doc.GetValue<string>("PaymentType")
+                    });
+
+                foreach (var doc in snapshot.Documents)
                 {
                     var loan = doc.ConvertTo<mLoans>();
                     var createdAt = loan.CreatedAt != null ? loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss") : null;
-                    // Get user info
                     var user = usersDict.ContainsKey(loan.UID) ? usersDict[loan.UID] : null;
+
+                    // Match payable
+                    payablesDict.TryGetValue(loan.LoanRequestID, out var payableInfo);
 
                     loanList.Add(new
                     {
@@ -323,7 +334,9 @@ namespace KuwagoAPI.Services
                             loan.LoanAmount,
                             loan.LoanPurpose,
                             loan.LoanStatus,
-                            CreatedAt = createdAt
+                            CreatedAt = createdAt,
+                            PayableID = payableInfo?.PayableID,
+                            PaymentType = payableInfo?.PaymentType
                         },
                         UserInfo = user == null ? null : new
                         {
@@ -355,6 +368,7 @@ namespace KuwagoAPI.Services
                 };
             }
         }
+
 
         public async Task<StatusResponse> FilterLoanRequestsAsync(LoanFilterDTOv2 filter)
         {
@@ -627,111 +641,89 @@ namespace KuwagoAPI.Services
                 {
                     var agreedLoan = doc.ToDictionary();
 
-                    // Extract base fields
                     string agreedLoanId = agreedLoan["AgreedLoanID"].ToString();
                     string borrowerUid = agreedLoan["BorrowerUID"].ToString();
                     string lenderUid = agreedLoan["LenderUID"].ToString();
                     double interestRate = Convert.ToDouble(agreedLoan["InterestRate"]);
                     DateTime agreementDate = ((Timestamp)agreedLoan["AgreementDate"]).ToDateTime();
 
-                    // Apply UID & AgreedLoanID filters first
+                    // Basic ID filters
                     if (!string.IsNullOrWhiteSpace(filter.AgreedLoanID) &&
                         !string.Equals(agreedLoanId, filter.AgreedLoanID, StringComparison.OrdinalIgnoreCase))
                         continue;
-
                     if (!string.IsNullOrWhiteSpace(filter.BorrowerUID) &&
                         !string.Equals(borrowerUid, filter.BorrowerUID, StringComparison.OrdinalIgnoreCase))
                         continue;
-
                     if (!string.IsNullOrWhiteSpace(filter.LenderUID) &&
                         !string.Equals(lenderUid, filter.LenderUID, StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    // Retrieve borrower
-                    var borrowerSnapshot = await _firestoreDb.Collection("Users").Document(borrowerUid).GetSnapshotAsync();
-                    if (!borrowerSnapshot.Exists) continue;
-                    var borrower = borrowerSnapshot.ConvertTo<mUser>();
+                    // Get borrower and lender concurrently
+                    var borrowerTask = _firestoreDb.Collection("Users").Document(borrowerUid).GetSnapshotAsync();
+                    var lenderTask = _firestoreDb.Collection("Users").Document(lenderUid).GetSnapshotAsync();
+                    await Task.WhenAll(borrowerTask, lenderTask);
 
-                    // Retrieve lender
-                    var lenderSnapshot = await _firestoreDb.Collection("Users").Document(lenderUid).GetSnapshotAsync();
-                    if (!lenderSnapshot.Exists) continue;
+                    var borrowerSnapshot = borrowerTask.Result;
+                    var lenderSnapshot = lenderTask.Result;
+                    if (!borrowerSnapshot.Exists || !lenderSnapshot.Exists) continue;
+
+                    var borrower = borrowerSnapshot.ConvertTo<mUser>();
                     var lender = lenderSnapshot.ConvertTo<mUser>();
 
-                    // Retrieve LoanRequestID from AgreedLoan (must be saved there when created)
-                    var loanRequestId = agreedLoan.ContainsKey("LoanRequestID") ? agreedLoan["LoanRequestID"].ToString() : null;
-                    if (string.IsNullOrWhiteSpace(loanRequestId))
-                        continue;
+                    // LoanRequestID link
+                    if (!agreedLoan.ContainsKey("LoanRequestID")) continue;
+                    var loanRequestId = agreedLoan["LoanRequestID"].ToString();
+                    if (string.IsNullOrWhiteSpace(loanRequestId)) continue;
 
                     var loanSnapshot = await _firestoreDb.Collection("LoanRequests").Document(loanRequestId).GetSnapshotAsync();
-                    if (!loanSnapshot.Exists)
-                        continue;
+                    if (!loanSnapshot.Exists) continue;
 
                     var loan = loanSnapshot.ConvertTo<mLoans>();
 
-                    // Apply loan status filter
+                    // Fetch Payable info
+                    var payableQuery = await _firestoreDb.Collection("Payables")
+                        .WhereEqualTo("LoanRequestID", loanRequestId)
+                        .GetSnapshotAsync();
+
+                    var payable = payableQuery.Documents.FirstOrDefault();
+                    string payableId = payable != null ? payable.GetValue<string>("PayableID") : null;
+                    string paymentType = payable != null ? payable.GetValue<string>("PaymentType") : null;
+
+                    // Filters
                     if (!string.IsNullOrWhiteSpace(filter.LoanStatus) &&
                         !string.Equals(loan.LoanStatus, filter.LoanStatus, StringComparison.OrdinalIgnoreCase))
                         continue;
-
-                    // Apply name and date filters
+                    if (filter.MinInterestRate.HasValue && interestRate < filter.MinInterestRate.Value) continue;
+                    if (filter.MaxInterestRate.HasValue && interestRate > filter.MaxInterestRate.Value) continue;
+                    if (filter.AgreementDateAfter.HasValue && agreementDate < filter.AgreementDateAfter.Value) continue;
+                    if (filter.AgreementDateBefore.HasValue && agreementDate > filter.AgreementDateBefore.Value) continue;
                     if (!string.IsNullOrWhiteSpace(filter.BorrowerFirstName) &&
                         !borrower.FirstName.Contains(filter.BorrowerFirstName, StringComparison.OrdinalIgnoreCase))
                         continue;
-
                     if (!string.IsNullOrWhiteSpace(filter.BorrowerLastName) &&
                         !borrower.LastName.Contains(filter.BorrowerLastName, StringComparison.OrdinalIgnoreCase))
                         continue;
-
                     if (!string.IsNullOrWhiteSpace(filter.LenderFirstName) &&
                         !lender.FirstName.Contains(filter.LenderFirstName, StringComparison.OrdinalIgnoreCase))
                         continue;
-
                     if (!string.IsNullOrWhiteSpace(filter.LenderLastName) &&
                         !lender.LastName.Contains(filter.LenderLastName, StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    if (filter.MinInterestRate.HasValue && interestRate < filter.MinInterestRate.Value) continue;
-                    if (filter.MaxInterestRate.HasValue && interestRate > filter.MaxInterestRate.Value) continue;
-
-                    if (filter.AgreementDateAfter.HasValue && agreementDate < filter.AgreementDateAfter.Value) continue;
-                    if (filter.AgreementDateBefore.HasValue && agreementDate > filter.AgreementDateBefore.Value) continue;
-
+                    // Add simplified result
                     result.Add(new
                     {
-                        AgreedLoanID = agreedLoanId,
-                        InterestRate = interestRate,
+                        LoanPurpose = loan.LoanPurpose,
+                        Type = loan.LoanType,
+                        Amount = loan.LoanAmount,
+                        Interest = interestRate,
+                        Lender = $"{lender.FirstName} {lender.LastName}",
+                        Borrower = $"{borrower.FirstName} {borrower.LastName}",
                         AgreementDate = agreementDate.ToString("yyyy-MM-dd HH:mm:ss"),
-                        LenderInfo = new
-                        {
-                            lender.UID,
-                            lender.FirstName,
-                            lender.LastName,
-                            lender.Email
-                        },
-                        BorrowerInfo = new
-                        {
-                            borrower.UID,
-                            borrower.FirstName,
-                            borrower.LastName,
-                            borrower.Email
-                        },
-                        UpdatedLoanInfo = new
-                        {
-                            loan.LoanRequestID,
-                            loan.UID,
-                            loan.MaritalStatus,
-                            loan.HighestEducation,
-                            loan.EmploymentInformation,
-                            loan.DetailedAddress,
-                            loan.ResidentType,
-                            loan.LoanType,
-                            loan.LoanAmount,
-                            loan.LoanPurpose,
-                            loan.LoanStatus,
-                            CreatedAt = loan.CreatedAt != null ? loan.CreatedAt.ToDateTime().ToString("yyyy-MM-dd HH:mm:ss") : null
-                        }
+                        Status = loan.LoanStatus,
+                        PayableID = payableId,
+                        PaymentType = paymentType
                     });
-
                 }
 
                 return new StatusResponse
@@ -747,11 +739,13 @@ namespace KuwagoAPI.Services
                 return new StatusResponse
                 {
                     Success = false,
-                    Message = $"An error occurred: {ex.Message}",
+                    Message = $"An error occurred while filtering loans: {ex.Message}",
                     StatusCode = 500
                 };
             }
         }
+
+
 
 
     }
