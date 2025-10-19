@@ -51,15 +51,15 @@ namespace KuwagoAPI.Services
                     return new StatusResponse { Success = false, Message = "Invalid TermsOfMonths value in Payable record.", StatusCode = 500 };
 
                 double requiredInstallment = Math.Round(totalPayableAmount / terms, 2);
-                if (dto.AmountPaid < requiredInstallment)
-                {
-                    return new StatusResponse
-                    {
-                        Success = false,
-                        Message = $"Minimum payment required per installment is {requiredInstallment}. You submitted {dto.AmountPaid}.",
-                        StatusCode = 400
-                    };
-                }
+                //if (dto.AmountPaid < requiredInstallment)
+                //{
+                //    return new StatusResponse
+                //    {
+                //        Success = false,
+                //        Message = $"Minimum payment required per installment is {requiredInstallment}. You submitted {dto.AmountPaid}.",
+                //        StatusCode = 400
+                //    };
+                //}
 
                 // Get total paid so far for this PayableID
                 var paymentsQuery = await _firestoreDb.Collection("Payments")
@@ -627,32 +627,165 @@ namespace KuwagoAPI.Services
                     return new StatusResponse { Success = false, Message = "Payable not found", StatusCode = 404 };
 
                 var payable = payableSnapshot.ToDictionary();
-                
-                // Verify the borrower owns this payable
+
+                // Verify ownership
                 if (payable["BorrowerUID"].ToString() != borrowerUid)
                     return new StatusResponse { Success = false, Message = "Unauthorized access", StatusCode = 403 };
 
                 double totalPayableAmount = Convert.ToDouble(payable["TotalPayableAmount"]);
                 int terms = Enum.TryParse<TermsOfMonths>(payable["TermsOfMonths"].ToString(), out var parsedTerms) ? (int)parsedTerms : 0;
                 var paymentSchedule = payable.ContainsKey("PaymentSchedule") ? (List<object>)payable["PaymentSchedule"] : null;
-
                 var monthlyPayment = Math.Round(totalPayableAmount / terms, 2);
 
+                // 🔹 Convert payment schedule timestamps to ordered due dates
                 var scheduleDates = paymentSchedule?
                     .OfType<Timestamp>()
-                    .Select(ts => ts.ToDateTime().ToString("yyyy-MM-dd"))
-                    .ToList() ?? new List<string>();
+                    .Select(ts => ts.ToDateTime().Date)
+                    .OrderBy(d => d)
+                    .ToList() ?? new List<DateTime>();
 
-                // Get actual paid dates
-                var paymentsQuery = await _firestoreDb.Collection("Payments")
+                // 🔹 Fetch actual payments
+                var paymentsSnapshot = await _firestoreDb.Collection("Payments")
                     .WhereEqualTo("PayableID", payableId)
                     .WhereEqualTo("BorrowerUID", borrowerUid)
                     .OrderBy("PaymentDate")
                     .GetSnapshotAsync();
 
-                var paidDates = paymentsQuery.Documents
-                    .Select(doc => ((Timestamp)doc.GetValue<Timestamp>("PaymentDate")).ToDateTime().ToString("yyyy-MM-dd"))
+                var paymentRecords = paymentsSnapshot.Documents
+                    .Select(doc => new
+                    {
+                        PaymentDate = ((Timestamp)doc.GetValue<Timestamp>("PaymentDate")).ToDateTime().Date,
+                        AmountPaid = doc.ContainsField("AmountPaid") ? Convert.ToDouble(doc.GetValue<double>("AmountPaid")) : 0.0
+                    })
+                    .OrderBy(x => x.PaymentDate)
                     .ToList();
+
+                var scheduleList = new List<object>();
+                var unpaidDates = new List<string>();
+
+                // 🔹 If no payments exist → mark all as unpaid
+                if (!paymentRecords.Any())
+                {
+                    foreach (var dueDate in scheduleDates)
+                    {
+                        scheduleList.Add(new
+                        {
+                            DueDate = dueDate.ToString("yyyy-MM-dd"),
+                            PaymentDate = (string?)null,
+                            AmountPaid = 0.0,
+                            Status = "Unpaid"
+                        });
+                        unpaidDates.Add(dueDate.ToString("yyyy-MM-dd"));
+                    }
+                }
+                else
+                {
+                    var remainingPayments = new Queue<(DateTime date, double amount)>(
+                        paymentRecords.Select(x => (x.PaymentDate, x.AmountPaid))
+                    );
+
+                    double advanceBalance = 0; // carry forward any overpayment
+
+                    foreach (var dueDate in scheduleDates)
+                    {
+                        string status;
+                        DateTime? paymentDate = null;
+                        double amountPaid = 0;
+                        double actualPayment = 0;
+                        double requiredPayment = monthlyPayment;
+
+                        // 🔹 Adjust required payment if previous advance exists
+                        if (advanceBalance > 0)
+                        {
+                            requiredPayment = Math.Max(0, monthlyPayment - advanceBalance);
+                        }
+
+                        if (remainingPayments.Count == 0)
+                        {
+                            // 🔹 Even if no new payments, check if we have advance balance to apply
+                            if (advanceBalance > 0)
+                            {
+                                double appliedAdvance = Math.Min(advanceBalance, monthlyPayment);
+                                actualPayment = Math.Round(monthlyPayment - appliedAdvance, 2);
+                                advanceBalance = Math.Max(0, advanceBalance - (monthlyPayment - appliedAdvance));
+                                status = "Advance Applied";
+                            }
+                            else
+                            {
+                                status = "Unpaid";
+                                unpaidDates.Add(dueDate.ToString("yyyy-MM-dd"));
+                            }
+                        }
+                        else
+                        {
+                            var nextPayment = remainingPayments.Peek();
+
+                            if (nextPayment.date <= dueDate)
+                            {
+                                paymentDate = nextPayment.date;
+                                amountPaid = nextPayment.amount;
+                                remainingPayments.Dequeue();
+
+                                double totalAvailable = amountPaid + advanceBalance;
+
+                                if (totalAvailable >= monthlyPayment)
+                                {
+                                    actualPayment = monthlyPayment;
+                                    advanceBalance = totalAvailable - monthlyPayment;
+                                    status = nextPayment.date < dueDate ? "Advance" : "Paid";
+                                }
+                                else
+                                {
+                                    actualPayment = totalAvailable;
+                                    advanceBalance = 0;
+                                    status = "Partial";
+                                }
+                            }
+                            else
+                            {
+                                // 🔹 No payment but still may have advance to apply
+                                if (advanceBalance > 0)
+                                {
+                                    double appliedAdvance = Math.Min(advanceBalance, monthlyPayment);
+                                    actualPayment = Math.Round(monthlyPayment - appliedAdvance, 2);
+                                    advanceBalance = Math.Max(0, advanceBalance - (monthlyPayment - appliedAdvance));
+                                    status = "Advance Applied";
+                                }
+                                else
+                                {
+                                    status = "Unpaid";
+                                    unpaidDates.Add(dueDate.ToString("yyyy-MM-dd"));
+                                }
+                            }
+                        }
+
+
+                        scheduleList.Add(new
+                        {
+                            DueDate = dueDate.ToString("yyyy-MM-dd"),
+                            PaymentDate = paymentDate?.ToString("yyyy-MM-dd"),
+                            AmountPaid = amountPaid,
+                            RequiredToPayEveryMonth = monthlyPayment,
+                            ActualPayment = Math.Round(actualPayment, 2),
+                            Status = status
+                        });
+                    }
+
+
+
+                    // 🔹 Handle extra advance payments (beyond all due dates)
+                    while (remainingPayments.Count > 0)
+                    {
+                        var extra = remainingPayments.Dequeue();
+                        scheduleList.Add(new
+                        {
+                            DueDate = scheduleDates.LastOrDefault().AddMonths(1).ToString("yyyy-MM-dd"), // map to next logical month
+                            PaymentDate = extra.date.ToString("yyyy-MM-dd"),
+                            AmountPaid = extra.amount,
+                            Status = "Advance"
+                        });
+                    }
+                }
 
                 return new StatusResponse
                 {
@@ -665,8 +798,7 @@ namespace KuwagoAPI.Services
                         MonthlyPayment = monthlyPayment,
                         TotalAmount = totalPayableAmount,
                         Terms = terms,
-                        ScheduledDates = scheduleDates,
-                        PaidDates = paidDates
+                        Schedule = scheduleList
                     }
                 };
             }
@@ -680,5 +812,8 @@ namespace KuwagoAPI.Services
                 };
             }
         }
+
+
+
     }
 }
