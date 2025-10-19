@@ -543,16 +543,18 @@ namespace KuwagoAPI.Services
                     var existingPayables = await _firestoreDb.Collection("Payables")
                         .WhereEqualTo("LoanRequestID", dto.LoanRequestID)
                         .GetSnapshotAsync();
-
                     if (existingPayables.Count == 0)
                     {
                         var startDate = DateTime.UtcNow.Date.AddMonths(1);
                         for (int i = 0; i < (int)dto.TermsOfMonths; i++)
                             paymentScheduleDates.Add(Timestamp.FromDateTime(startDate.AddMonths(i)));
 
-                        totalPayable = dto.UpdatedLoanAmount + (dto.UpdatedLoanAmount * (dto.InterestRate / 100.0));
+                        // ✅ Compute interest and totals
+                        double interestAmount = dto.UpdatedLoanAmount * (dto.InterestRate / 100.0);
+                        totalPayable = dto.UpdatedLoanAmount + interestAmount;
                         paymentPerMonth = totalPayable / (int)dto.TermsOfMonths;
 
+                        // ✅ Create Payable record
                         payableDocRef = _firestoreDb.Collection("Payables").Document();
                         await payableDocRef.SetAsync(new
                         {
@@ -568,14 +570,18 @@ namespace KuwagoAPI.Services
                             CreatedAt = Timestamp.FromDateTime(DateTime.UtcNow)
                         });
 
-                        // Update LoanAmount in LoanRequests to match TotalPayableAmount
+                        // ✅ Update LoanRequest with new fields (interest info included)
                         await loanDocRef.UpdateAsync(new Dictionary<string, object>
-                        {
-                            { "LoanAmount", totalPayable },
-                            { "AgreementDate", Timestamp.FromDateTime(DateTime.UtcNow) },
-                            { "LoanStatus", parsedStatus.ToString() }
-                        });
+    {
+        { "LoanAmount", dto.UpdatedLoanAmount },
+        { "InterestRate", dto.InterestRate },
+        { "InterestAmount", interestAmount },
+        { "TotalPayableAmount", totalPayable },
+        { "AgreementDate", Timestamp.FromDateTime(DateTime.UtcNow) },
+        { "LoanStatus", parsedStatus.ToString() }
+    });
                     }
+
                 }
                 else
                 {
@@ -711,12 +717,17 @@ namespace KuwagoAPI.Services
                         continue;
 
                     // Add simplified result
+                    // Add simplified result (with interest amount & rate)
+                    double loanAmount = loan.LoanAmount;
+                    double interestAmount = loanAmount * (interestRate / 100.0);
+
                     result.Add(new
                     {
                         LoanPurpose = loan.LoanPurpose,
                         Type = loan.LoanType,
-                        Amount = loan.LoanAmount,
-                        Interest = interestRate,
+                        Amount = loanAmount,
+                        InterestRate = interestRate,
+                        InterestAmount = interestAmount,
                         Lender = $"{lender.FirstName} {lender.LastName}",
                         Borrower = $"{borrower.FirstName} {borrower.LastName}",
                         AgreementDate = agreementDate.ToString("yyyy-MM-dd HH:mm:ss"),
@@ -724,6 +735,7 @@ namespace KuwagoAPI.Services
                         PayableID = payableId,
                         PaymentType = paymentType
                     });
+
                 }
 
                 return new StatusResponse

@@ -45,5 +45,20 @@ namespace KuwagoAPI.Controllers.Analytics
             });
         }
 
+        [Authorize(Policy = "AdminOnly")]
+        [HttpGet("RevenueTrend")]
+        public async Task<IActionResult> GetRevenueTrend([FromQuery] string period = "monthly")
+        {
+            var data = await _analyticsService.GetRevenueTrendAsync(period);
+
+            return Ok(new
+            {
+                success = true,
+                message = "Revenue trend data fetched successfully",
+                data
+            });
+        }
+
+
     }
 }
