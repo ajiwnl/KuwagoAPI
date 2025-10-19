@@ -30,5 +30,20 @@ namespace KuwagoAPI.Controllers.Analytics
                 data
             });
         }
+
+        [Authorize(Policy = "AdminOnly")]
+        [HttpGet("UserGrowth")]
+        public async Task<IActionResult> GetUserGrowth([FromQuery] string period = "monthly")
+        {
+            var data = await _analyticsService.GetUserGrowthAsync(period);
+
+            return Ok(new
+            {
+                success = true,
+                message = "User growth data fetched successfully",
+                data
+            });
+        }
+
     }
 }

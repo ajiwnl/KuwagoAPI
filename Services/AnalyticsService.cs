@@ -43,5 +43,70 @@ namespace KuwagoAPI.Services
 
             return analytics;
         }
+
+        public async Task<IEnumerable<object>> GetUserGrowthAsync(string period)
+        {
+            var snapshot = await _firestoreDb.Collection("Users").GetSnapshotAsync();
+            var timezone = TimeZoneInfo.FindSystemTimeZoneById("Singapore Standard Time"); // UTC+8
+            var users = new List<DateTime>();
+
+            // Collect createdAt timestamps
+            foreach (var doc in snapshot.Documents)
+            {
+                if (!doc.ContainsField("createdAt")) continue;
+
+                try
+                {
+                    DateTime createdAt = doc.GetValue<Timestamp>("createdAt").ToDateTime();
+                    createdAt = TimeZoneInfo.ConvertTimeFromUtc(createdAt, timezone);
+                    users.Add(createdAt);
+                }
+                catch { continue; }
+            }
+
+            // Group by period
+            IEnumerable<IGrouping<string, DateTime>> grouped;
+            switch (period.ToLower())
+            {
+                case "daily":
+                    grouped = users
+                        .GroupBy(u => u.ToString("yyyy-MM-dd"))
+                        .OrderBy(g => g.Key);
+                    break;
+
+                case "weekly":
+                    grouped = users
+                        .GroupBy(u =>
+                        {
+                            var cal = System.Globalization.CultureInfo.InvariantCulture.Calendar;
+                            var week = cal.GetWeekOfYear(u, System.Globalization.CalendarWeekRule.FirstFourDayWeek, DayOfWeek.Monday);
+                            return $"{u.Year}-W{week:D2}";
+                        })
+                        .OrderBy(g => g.Key);
+                    break;
+
+                case "yearly":
+                    grouped = users
+                        .GroupBy(u => u.ToString("yyyy"))
+                        .OrderBy(g => g.Key);
+                    break;
+
+                default: // monthly
+                    grouped = users
+                        .GroupBy(u => u.ToString("yyyy-MM"))
+                        .OrderBy(g => g.Key);
+                    break;
+            }
+
+            // Build chart-friendly data
+            var result = grouped.Select(g => new
+            {
+                Period = g.Key,
+                Count = g.Count()
+            });
+
+            return result;
+        }
+
     }
 }
