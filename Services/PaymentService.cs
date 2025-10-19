@@ -429,6 +429,10 @@ namespace KuwagoAPI.Services
                     Data = new
                     {
                         PaymentID = paymentId,
+                        FrontendUrl = "https://kuwago.vercel.app/Payment/Success",
+                        AmountPaid = amountPaid,
+                        PaymentDate = Timestamp.FromDateTime(DateTime.UtcNow),
+                        DueDate = Timestamp.FromDateTime(nextDueDate.HasValue ? nextDueDate.Value : DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Utc)),
                         Status = "Completed",
                         IsOnTime = isOnTime
                     }
@@ -463,6 +467,10 @@ namespace KuwagoAPI.Services
                 return new StatusResponse
                 {
                     Success = true,
+                    Data = new
+                    {
+                        FrontendUrl = "https://kuwago.vercel.app/Payment/Failed",
+                    },
                     Message = "Payment cancelled.",
                     StatusCode = 200
                 };
