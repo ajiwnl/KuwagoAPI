@@ -660,7 +660,7 @@ namespace KuwagoAPI.Services
                     .OrderBy(x => x.PaymentDate)
                     .ToList();
 
-                var scheduleList = new List<object>();
+                var scheduleList = new List<PaymentScheduleItem>();
                 var unpaidDates = new List<string>();
 
                 // 🔹 If no payments exist → mark all as unpaid
@@ -668,11 +668,13 @@ namespace KuwagoAPI.Services
                 {
                     foreach (var dueDate in scheduleDates)
                     {
-                        scheduleList.Add(new
+                        scheduleList.Add(new PaymentScheduleItem
                         {
                             DueDate = dueDate.ToString("yyyy-MM-dd"),
-                            PaymentDate = (string?)null,
-                            AmountPaid = 0.0,
+                            PaymentDate = null,
+                            AmountPaid = 0,
+                            RequiredToPayEveryMonth = monthlyPayment,
+                            ActualPayment = 0,
                             Status = "Unpaid"
                         });
                         unpaidDates.Add(dueDate.ToString("yyyy-MM-dd"));
@@ -702,7 +704,6 @@ namespace KuwagoAPI.Services
 
                         if (remainingPayments.Count == 0)
                         {
-                            // 🔹 Even if no new payments, check if we have advance balance to apply
                             if (advanceBalance > 0)
                             {
                                 double appliedAdvance = Math.Min(advanceBalance, monthlyPayment);
@@ -743,7 +744,6 @@ namespace KuwagoAPI.Services
                             }
                             else
                             {
-                                // 🔹 No payment but still may have advance to apply
                                 if (advanceBalance > 0)
                                 {
                                     double appliedAdvance = Math.Min(advanceBalance, monthlyPayment);
@@ -759,8 +759,7 @@ namespace KuwagoAPI.Services
                             }
                         }
 
-
-                        scheduleList.Add(new
+                        scheduleList.Add(new PaymentScheduleItem
                         {
                             DueDate = dueDate.ToString("yyyy-MM-dd"),
                             PaymentDate = paymentDate?.ToString("yyyy-MM-dd"),
@@ -771,17 +770,17 @@ namespace KuwagoAPI.Services
                         });
                     }
 
-
-
                     // 🔹 Handle extra advance payments (beyond all due dates)
                     while (remainingPayments.Count > 0)
                     {
                         var extra = remainingPayments.Dequeue();
-                        scheduleList.Add(new
+                        scheduleList.Add(new PaymentScheduleItem
                         {
-                            DueDate = scheduleDates.LastOrDefault().AddMonths(1).ToString("yyyy-MM-dd"), // map to next logical month
+                            DueDate = scheduleDates.LastOrDefault().AddMonths(1).ToString("yyyy-MM-dd"),
                             PaymentDate = extra.date.ToString("yyyy-MM-dd"),
                             AmountPaid = extra.amount,
+                            RequiredToPayEveryMonth = monthlyPayment,
+                            ActualPayment = extra.amount,
                             Status = "Advance"
                         });
                     }
@@ -812,6 +811,7 @@ namespace KuwagoAPI.Services
                 };
             }
         }
+
 
 
 
